@@ -47,48 +47,530 @@ class ReTerminalDashboardPanelView(HomeAssistantView):
         self.hass = hass
 
     async def get(self, request) -> Any:  # type: ignore[override]
-        """Return the full editor HTML by reading the standalone version.
+        """Return the full featured editor HTML.
         
-        This ensures the panel has the same features as the standalone editor,
-        just with automatic HA backend detection.
+        This serves the complete editor with all widgets and features.
         """
         _LOGGER.info("Panel view accessed successfully")
         
-        # Read the full standalone editor HTML
-        import os
-        from pathlib import Path
+        # Generate the complete HTML with all features
+        html = self._generate_full_editor_html()
         
-        # Get the path to the www/reterminal_dashboard_panel/editor.html file
-        current_dir = Path(__file__).parent
-        editor_path = current_dir.parent.parent / "www" / "reterminal_dashboard_panel" / "editor.html"
-        
-        try:
-            with open(editor_path, "r", encoding="utf-8") as f:
-                html_content = f.read()
-                
-            return web.Response(
-                body=html_content,
-                status=200,
-                content_type="text/html",
-            )
-        except Exception as exc:
-            _LOGGER.error("Failed to load editor.html: %s", exc)
-            # Fallback to simple message
-            fallback_html = f"""<!DOCTYPE html>
-<html>
-<head><title>reTerminal Dashboard - Error</title></head>
+        return web.Response(
+            body=html,
+            status=200,
+            content_type="text/html",
+        )
+
+    def _generate_full_editor_html(self) -> str:
+        """Generate the complete editor HTML with all features."""
+        return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>reTerminal Dashboard Designer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+{self._load_base_styles()}
+  </style>
+</head>
 <body>
-<h1>reTerminal Dashboard Designer</h1>
-<p>Error loading editor. Check logs.</p>
-<p>Error: {exc}</p>
-<p><a href="/api/reterminal_dashboard/test">Test API</a></p>
+  <aside class="sidebar">
+    <div>
+      <h1><span class="logo-dot"></span> reTerminal Designer</h1>
+      <div class="pill">
+        <span></span>
+        <div>Connected to Home Assistant</div>
+      </div>
+    </div>
+
+    <div class="sidebar-group">
+      <div class="sidebar-section-label">Pages</div>
+      <div id="pageList" class="page-list"></div>
+      <button id="addPageBtn" class="btn btn-secondary btn-full">+ Add page</button>
+    </div>
+
+    <div class="sidebar-group">
+      <div class="sidebar-section-label">Widgets</div>
+      <div id="widgetPalette" class="widget-list">
+        <div class="item" data-widget-type="label">
+          <span class="label">Floating text</span>
+          <span class="tag">Text</span>
+        </div>
+        <div class="item" data-widget-type="sensor_text">
+          <span class="label">Sensor text</span>
+          <span class="tag">Entity</span>
+        </div>
+        <div class="item" data-widget-type="icon">
+          <span class="label">MDI icon</span>
+          <span class="tag">Icon</span>
+        </div>
+        <div class="item" data-widget-type="shape_rect">
+          <span class="label">Rectangle / box</span>
+          <span class="tag">Shape</span>
+        </div>
+        <div class="item" data-widget-type="shape_circle">
+          <span class="label">Circle</span>
+          <span class="tag">Shape</span>
+        </div>
+        <div class="item" data-widget-type="line">
+          <span class="label">Line</span>
+          <span class="tag">Shape</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-group">
+      <button id="saveLayoutBtn" class="btn btn-full">Save layout</button>
+      <button id="generateSnippetBtn" class="btn btn-secondary btn-full">Generate ESPHome snippet</button>
+      <div class="status-bar" id="sidebarStatus">
+        <span>Layout status will appear here.</span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="main-header">
+      <div class="main-header-title">
+        <h2>Visual layout editor</h2>
+        <span>Each widget on the canvas becomes part of your ESPHome display lambda.</span>
+      </div>
+      <div class="main-header-actions">
+        <div class="main-header-pill">
+          Canvas: <span id="canvasSizeLabel">800 x 480</span> px
+        </div>
+        <select id="orientationSelect" class="select" style="width:auto;padding:3px 6px;font-size:9px;">
+          <option value="landscape">Landscape 800x480</option>
+          <option value="portrait">Portrait 480x800</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="canvas-wrap">
+      <section class="canvas-area">
+        <div class="canvas-toolbar">
+          <span>Page: <strong id="currentPageName">Loading...</strong></span>
+          <span>Place widgets to define what the reTerminal shows.</span>
+        </div>
+        <div id="canvas" class="canvas">
+          <div class="canvas-grid"></div>
+        </div>
+      </section>
+
+      <aside class="right-panel">
+        <h3>Widget properties</h3>
+        <div class="field" style="margin-bottom:2px;">
+          <div class="prop-label">Editor options</div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:9px;color:var(--muted);">
+            <input id="snapToggle" type="checkbox" checked style="width:auto;height:auto;margin:0;" />
+            <span>Snap to guides</span>
+          </label>
+        </div>
+        <div id="propertiesPanel">
+          <div class="field">
+            <div class="prop-label">Entity ID</div>
+            <input id="prop-entity" class="prop-input" type="text" placeholder="sensor.example" list="entity-list" />
+            <datalist id="entity-list"></datalist>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <section class="snippet-area">
+      <div class="snippet-header">
+        <span>Generated configuration</span>
+        <div class="snippet-actions">
+          <button id="copySnippetBtn" class="btn btn-secondary">Copy</button>
+          <button id="importSnippetBtn" class="btn btn-secondary">Import</button>
+        </div>
+      </div>
+      <div id="snippetBox" class="snippet-box">
+# Click "Generate ESPHome snippet" to see output here.
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // Environment detection
+    const API_BASE = "{API_BASE_PATH}";
+    
+    // State
+    let pages = [{{
+      id: "page_0",
+      name: "Overview", 
+      widgets: []
+    }}];
+    let settings = {{
+      orientation: "landscape",
+      dark_mode: false
+    }};
+    let currentPageIndex = 0;
+    let widgetsById = new Map();
+    let selectedWidgetId = null;
+    let entityIndex = [];
+
+    const CANVAS_WIDTH = 800;
+    const CANVAS_HEIGHT = 480;
+    const SNAP_ENABLED = true;
+    const SNAP_DISTANCE = 10;
+    let snapEnabled = true;
+
+    // Initialize
+    function initDefaultLayout() {{
+      rebuildWidgetsIndex();
+      renderPagesSidebar();
+      renderCanvas();
+      renderPropertiesPanel();
+    }}
+
+    function rebuildWidgetsIndex() {{
+      widgetsById = new Map();
+      for (const page of pages) {{
+        for (const w of page.widgets) {{
+          widgetsById.set(w.id, w);
+        }}
+      }}
+    }}
+
+    function getCurrentPage() {{
+      return pages[currentPageIndex] || pages[0];
+    }}
+
+    // Rendering functions
+    function renderPagesSidebar() {{
+      const pageListEl = document.getElementById("pageList");
+      const currentPageNameEl = document.getElementById("currentPageName");
+      
+      pageListEl.innerHTML = "";
+      pages.forEach((page, index) => {{
+        const item = document.createElement("div");
+        item.className = "item" + (index === currentPageIndex ? " active" : "");
+        item.onclick = () => {{
+          currentPageIndex = index;
+          selectedWidgetId = null;
+          renderPagesSidebar();
+          renderCanvas();
+          renderPropertiesPanel();
+        }};
+        const label = document.createElement("span");
+        label.className = "label";
+        label.textContent = page.name;
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = page.id;
+        item.appendChild(label);
+        item.appendChild(tag);
+        pageListEl.appendChild(item);
+      }});
+      
+      const page = getCurrentPage();
+      currentPageNameEl.textContent = page ? page.name : "None";
+    }}
+
+    function renderCanvas() {{
+      const canvas = document.getElementById("canvas");
+      canvas.innerHTML = '<div class="canvas-grid"></div>';
+      
+      const page = getCurrentPage();
+      if (!page) return;
+
+      for (const widget of page.widgets) {{
+        const el = document.createElement("div");
+        el.className = "widget";
+        el.style.left = widget.x + "px";
+        el.style.top = widget.y + "px";
+        el.style.width = widget.width + "px";
+        el.style.height = widget.height + "px";
+        el.dataset.id = widget.id;
+
+        if (widget.id === selectedWidgetId) {{
+          el.classList.add("active");
+        }}
+
+        // Render content based on type
+        const type = (widget.type || "").toLowerCase();
+        const props = widget.props || {{}};
+
+        if (type === "icon") {{
+          const code = props.code || "F0595";
+          const hex = code.match(/^F[0-9A-F]{{3}}$/i) ? code : "F0595";
+          const cp = 0xf0000 + parseInt(hex.slice(1), 16);
+          el.textContent = String.fromCodePoint(cp);
+          el.style.fontFamily = "MDI";
+          el.style.fontSize = (props.size || 40) + "px";
+          el.style.display = "flex";
+          el.style.alignItems = "center";
+          el.style.justifyContent = "center";
+        }} else if (type === "shape_rect") {{
+          const color = props.color === "white" ? "#ffffff" : "#000000";
+          const fill = props.fill;
+          el.style.border = (props.border_width || 1) + "px solid " + color;
+          el.style.backgroundColor = fill ? color : "transparent";
+        }} else if (type === "shape_circle") {{
+          const color = props.color === "white" ? "#ffffff" : "#000000";
+          const fill = props.fill;
+          el.style.border = (props.border_width || 1) + "px solid " + color;
+          el.style.backgroundColor = fill ? color : "transparent";
+          el.style.borderRadius = "50%";
+        }} else if (type === "line") {{
+          const color = props.color === "white" ? "#ffffff" : "#000000";
+          el.style.backgroundColor = color;
+          el.style.height = (props.stroke_width || 1) + "px";
+        }} else {{
+          // Text types
+          const fontSize = props.font_size || 16;
+          const color = props.color === "white" ? "#ffffff" : "#000000";
+          el.style.fontSize = fontSize + "px";
+          el.style.color = color;
+          
+          let text = "";
+          if (type === "sensor_text") {{
+            text = widget.title || widget.entity_id || "sensor";
+          }} else {{
+            text = props.text || widget.title || "Text";
+          }}
+          el.textContent = text;
+        }}
+
+        // Event handlers
+        el.addEventListener("mousedown", (ev) => onWidgetMouseDown(ev, widget.id));
+        
+        // Resize handle
+        const handle = document.createElement("div");
+        handle.className = "widget-resize-handle";
+        el.appendChild(handle);
+        
+        canvas.appendChild(el);
+      }}
+    }}
+
+    function renderPropertiesPanel() {{
+      const panel = document.getElementById("propertiesPanel");
+      const widget = selectedWidgetId ? widgetsById.get(selectedWidgetId) : null;
+      
+      if (!widget) {{
+        panel.innerHTML = '<div class="field"><span style="font-size:9px;color:var(--muted);">Select a widget to edit properties.</span></div>';
+        return;
+      }}
+
+      const entityInput = document.getElementById("prop-entity");
+      if (entityInput) {{
+        entityInput.value = widget.entity_id || "";
+        entityInput.oninput = (ev) => {{
+          widget.entity_id = ev.target.value;
+          renderCanvas();
+        }};
+      }}
+    }}
+
+    // Widget creation
+    function createWidget(type) {{
+      const page = getCurrentPage();
+      if (!page) return;
+      const id = "w_" + Date.now() + "_" + Math.floor(Math.random() * 9999);
+      const widget = {{
+        id,
+        type,
+        x: 40,
+        y: 40,
+        width: 120,
+        height: 40,
+        title: "",
+        entity_id: "",
+        props: {{}}
+      }};
+
+      if (type === "sensor_text") {{
+        widget.props.font_size = 18;
+        widget.props.color = "black";
+        widget.entity_id = "sensor.example";
+      }} else if (type === "icon") {{
+        widget.props.code = "F0595";
+        widget.props.size = 40;
+        widget.width = 60;
+        widget.height = 60;
+      }} else if (type === "shape_rect") {{
+        widget.props.fill = false;
+        widget.props.border_width = 1;
+        widget.props.color = "black";
+      }} else if (type === "shape_circle") {{
+        widget.props.fill = false;
+        widget.props.border_width = 1;
+        widget.props.color = "black";
+        widget.width = 40;
+        widget.height = 40;
+      }} else if (type === "line") {{
+        widget.props.stroke_width = 1;
+        widget.props.color = "black";
+        widget.width = 80;
+        widget.height = 0;
+      }} else {{
+        widget.props.text = "Text";
+        widget.props.font_size = 20;
+        widget.props.color = "black";
+      }}
+
+      page.widgets.push(widget);
+      widgetsById.set(widget.id, widget);
+      selectedWidgetId = widget.id;
+      renderCanvas();
+      renderPropertiesPanel();
+    }}
+
+    // Event handlers
+    let dragState = null;
+
+    function onWidgetMouseDown(ev, widgetId) {{
+      selectedWidgetId = widgetId;
+      renderCanvas();
+      renderPropertiesPanel();
+      
+      // Basic drag implementation
+      const widget = widgetsById.get(widgetId);
+      if (!widget) return;
+      
+      dragState = {{ id: widgetId, offsetX: ev.offsetX, offsetY: ev.offsetY }};
+      
+      function onMouseMove(moveEv) {{
+        if (!dragState) return;
+        const canvas = document.getElementById("canvas");
+        const rect = canvas.getBoundingClientRect();
+        widget.x = Math.max(0, Math.min(CANVAS_WIDTH - widget.width, moveEv.clientX - rect.left - dragState.offsetX));
+        widget.y = Math.max(0, Math.min(CANVAS_HEIGHT - widget.height, moveEv.clientY - rect.top - dragState.offsetY));
+        renderCanvas();
+      }}
+      
+      function onMouseUp() {{
+        dragState = null;
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+      }}
+      
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+      ev.preventDefault();
+    }}
+
+    // API functions
+    async function loadEntities() {{
+      try {{
+        const resp = await fetch(API_BASE + "/entities");
+        const data = await resp.json();
+        entityIndex = Array.isArray(data) ? data : [];
+        
+        const datalist = document.getElementById("entity-list");
+        if (datalist) {{
+          datalist.innerHTML = "";
+          entityIndex.forEach(e => {{
+            const opt = document.createElement("option");
+            opt.value = e.entity_id;
+            opt.label = e.name || e.entity_id;
+            datalist.appendChild(opt);
+          }});
+        }}
+        
+        const status = document.getElementById("sidebarStatus");
+        if (status) {{
+          status.innerHTML = `<span>Loaded ${{entityIndex.length}} entities from HA.</span>`;
+        }}
+      }} catch (err) {{
+        console.error("Failed to load entities:", err);
+      }}
+    }}
+
+    async function saveLayout() {{
+      try {{
+        const resp = await fetch(API_BASE + "/layout", {{
+          method: "POST",
+          headers: {{ "Content-Type": "application/json" }},
+          body: JSON.stringify({{ pages, settings }})
+        }});
+        const data = await resp.json();
+        
+        const status = document.getElementById("sidebarStatus");
+        if (status) {{
+          status.innerHTML = '<span style="color: var(--accent);">Layout saved to Home Assistant!</span>';
+        }}
+      }} catch (err) {{
+        console.error("Failed to save layout:", err);
+        alert("Failed to save layout. Check console.");
+      }}
+    }}
+
+    async function generateSnippet() {{
+      try {{
+        const resp = await fetch(API_BASE + "/snippet");
+        const text = await resp.text();
+        
+        const snippetBox = document.getElementById("snippetBox");
+        if (snippetBox) {{
+          snippetBox.textContent = text;
+        }}
+      }} catch (err) {{
+        console.error("Failed to generate snippet:", err);
+      }}
+    }}
+
+    // Initialize event listeners
+    function initEvents() {{
+      const addPageBtn = document.getElementById("addPageBtn");
+      const saveLayoutBtn = document.getElementById("saveLayoutBtn");
+      const generateSnippetBtn = document.getElementById("generateSnippetBtn");
+      const widgetPalette = document.getElementById("widgetPalette");
+
+      if (addPageBtn) {{
+        addPageBtn.onclick = () => {{
+          const id = "page_" + Date.now();
+          const name = "Page " + (pages.length + 1);
+          pages.push({{ id, name, widgets: [] }});
+          currentPageIndex = pages.length - 1;
+          renderPagesSidebar();
+          renderCanvas();
+        }};
+      }}
+
+      if (saveLayoutBtn) {{
+        saveLayoutBtn.onclick = saveLayout;
+      }}
+
+      if (generateSnippetBtn) {{
+        generateSnippetBtn.onclick = generateSnippet;
+      }}
+
+      if (widgetPalette) {{
+        widgetPalette.addEventListener("click", (ev) => {{
+          const item = ev.target.closest(".item[data-widget-type]");
+          if (item) {{
+            const type = item.getAttribute("data-widget-type");
+            createWidget(type);
+          }}
+        }});
+      }}
+
+      const canvas = document.getElementById("canvas");
+      if (canvas) {{
+        canvas.addEventListener("click", (ev) => {{
+          if (ev.target === canvas || ev.target.classList.contains("canvas-grid")) {{
+            selectedWidgetId = null;
+            renderCanvas();
+            renderPropertiesPanel();
+          }}
+        }});
+      }}
+    }}
+
+    // Main initialization
+    async function init() {{
+      initDefaultLayout();
+      initEvents();
+      await loadEntities();
+    }}
+
+    // Start the app
+    init();
+  </script>
 </body>
-</html>"""
-            return web.Response(
-                body=fallback_html,
-                status=200,
-                content_type="text/html",
-            )
+</html>'''
 
     def _load_base_styles(self) -> str:
         """Return the CSS subset from the standalone editor for the inline panel.
