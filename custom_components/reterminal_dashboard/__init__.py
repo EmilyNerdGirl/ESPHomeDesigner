@@ -158,29 +158,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register HTTP views (idempotent)
     await async_register_http_views(hass, storage)
 
-    # Register the embedded editor panel view
+    # Register the embedded editor panel backend view
     hass.http.register_view(ReTerminalDashboardPanelView(hass))
 
     # Register services (idempotent)
     async_register_services(hass, storage)
 
-    # Ensure a sidebar panel is available that points at the embedded editor.
-    # We intentionally use the built-in iframe panel so we do not need YAML.
+    # Register a proper custom panel so the editor appears in the sidebar and
+    # loads inside the authenticated Home Assistant frontend context.
+    #
+    # We use the 'custom' panel type and let HA request:
+    #   /api/panel_custom/reterminal-dashboard
+    # which we fulfill by pointing to our own route /reterminal-dashboard.
+    #
+    # This keeps everything same-origin and authenticated without manual URLs.
     try:
-        hass.components.frontend.async_register_built_in_panel(
-            component_name="iframe",
+        hass.components.frontend.async_register_panel(
+            component_name="custom",
+            frontend_url_path="reterminal-dashboard",
             sidebar_title="reTerminal Dashboard",
             sidebar_icon="mdi:monitor-dashboard",
-            frontend_url_path="reterminal-dashboard",
             config={
-                "url": "/reterminal-dashboard",
+                "embed_iframe": True,
+                "url_path": "reterminal-dashboard",
             },
             require_admin=True,
         )
     except Exception as exc:  # noqa: BLE001
-        # If registration fails (e.g. older HA), log but do not break integration.
         _LOGGER.warning(
-            "%s: Failed to register built-in panel: %s",
+            "%s: Failed to register custom panel: %s",
             DOMAIN,
             exc,
         )
