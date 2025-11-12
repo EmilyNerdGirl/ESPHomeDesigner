@@ -280,6 +280,3 @@ These entities let you:
   - Review the generated YAML.
   - Keep it in version control.
   - Verify it against ESPHome validation before flashing.
-
-
-
