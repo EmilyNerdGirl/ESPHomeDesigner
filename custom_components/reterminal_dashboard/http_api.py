@@ -225,14 +225,97 @@ class ReTerminalImportSnippetView(HomeAssistantView):
         )
 
 
+class ReTerminalEntitiesView(HomeAssistantView):
+    """Expose a filtered list of Home Assistant entities for the editor entity picker.
+
+    This endpoint is:
+    - Authenticated (requires_auth = True)
+    - Local to Home Assistant
+    - Intended only for use by the reTerminal dashboard editor panel
+    """
+
+    url = f"{API_BASE_PATH}/entities"
+    name = "api:reterminal_dashboard_entities"
+    requires_auth = True
+    cors_allowed = True
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self.hass = hass
+
+    async def get(self, request) -> Any:  # type: ignore[override]
+        """Return a compact list of entities.
+
+        Optional query parameters:
+        - domains: comma-separated domains to include, e.g. "sensor,binary_sensor,weather"
+        - search: case-insensitive substring filter on entity_id or friendly_name
+        """
+        try:
+            params = request.rel_url.query  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            params = {}
+
+        # Parse domains filter
+        domain_filter: set[str] | None = None
+        raw_domains = params.get("domains")
+        if raw_domains:
+            domain_filter = {
+                d.strip().lower()
+                for d in raw_domains.split(",")
+                if d.strip()
+            }
+            if not domain_filter:
+                domain_filter = None
+
+        # Parse search filter
+        raw_search = params.get("search", "")
+        search = raw_search.strip().lower()
+
+        results: list[dict[str, str]] = []
+
+        for state in self.hass.states.async_all():
+            entity_id = state.entity_id
+            domain = entity_id.split(".", 1)[0] if "." in entity_id else ""
+            if domain_filter is not None and domain not in domain_filter:
+                continue
+
+            name = state.name or entity_id
+
+            if search:
+                haystack = f"{entity_id} {name}".lower()
+                if search not in haystack:
+                    continue
+
+            results.append(
+                {
+                    "entity_id": entity_id,
+                    "name": name,
+                    "domain": domain,
+                }
+            )
+
+            # Hard safety cap; avoid returning an excessively large payload.
+            if len(results) >= 1000:
+                break
+
+        return self._json(results)
+
+    def _json(self, data: Any, status_code: int = HTTPStatus.OK):
+        return self.Response(
+            body=json_dumps(data),
+            status=status_code,
+            content_type="application/json",
+        )
+
+
 async def async_register_http_views(hass: HomeAssistant, storage: DashboardStorage) -> None:
     """Register all HTTP views for this integration."""
 
     hass.http.register_view(ReTerminalLayoutView(hass, storage))
     hass.http.register_view(ReTerminalSnippetView(hass, storage))
     hass.http.register_view(ReTerminalImportSnippetView(hass, storage))
+    hass.http.register_view(ReTerminalEntitiesView(hass))
 
     _LOGGER.debug(
-        "reterminal_dashboard: HTTP API views registered at %s (layout, snippet, import_snippet)",
+        "reterminal_dashboard: HTTP API views registered at %s (layout, snippet, import_snippet, entities)",
         API_BASE_PATH,
     )
