@@ -21,6 +21,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, STORAGE_KEY, STORAGE_VERSION
 from .http_api import async_register_http_views
+from .panel import ReTerminalDashboardPanelView
 from .services import async_register_services, async_unregister_services
 from .storage import DashboardStorage
 from .models import DashboardState, DeviceConfig, PageConfig, WidgetConfig
@@ -157,8 +158,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register HTTP views (idempotent)
     await async_register_http_views(hass, storage)
 
+    # Register the embedded editor panel view
+    hass.http.register_view(ReTerminalDashboardPanelView(hass))
+
     # Register services (idempotent)
     async_register_services(hass, storage)
+
+    # Ensure a sidebar panel is available that points at the embedded editor.
+    # We intentionally use the built-in iframe panel so we do not need YAML.
+    try:
+        hass.components.frontend.async_register_built_in_panel(
+            component_name="iframe",
+            sidebar_title="reTerminal Dashboard",
+            sidebar_icon="mdi:monitor-dashboard",
+            frontend_url_path="reterminal-dashboard",
+            config={
+                "url": "/reterminal-dashboard",
+            },
+            require_admin=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        # If registration fails (e.g. older HA), log but do not break integration.
+        _LOGGER.warning(
+            "%s: Failed to register built-in panel: %s",
+            DOMAIN,
+            exc,
+        )
 
     _LOGGER.info("%s: Config entry %s setup completed", DOMAIN, entry.entry_id)
     return True
