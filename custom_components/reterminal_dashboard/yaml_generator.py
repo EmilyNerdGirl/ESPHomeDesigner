@@ -76,7 +76,7 @@ def generate_snippet(device: DeviceConfig) -> str:
     # NOTE: output, rtttl, sensor, time are provided by hardware template
     # We only generate: globals, fonts, text_sensor, button, script, display
     parts.append(_generate_globals())
-    parts.append(_generate_fonts())
+    parts.append(_generate_fonts(device))  # Pass device to collect icon glyphs
     parts.append(_generate_text_sensors(device))  # Only text_sensors for HA entities
     parts.append(_generate_navigation_buttons(device))
     parts.append(_generate_scripts(device))
@@ -108,21 +108,58 @@ def _generate_globals() -> str:
 """
 
 
-def _generate_fonts() -> str:
-    # Minimal conservative font set; must align with widget logic in editor.
-    return """font:
-  - file: "gfonts://Inter@400"
-    id: font_small
-    size: 18
-
-  - file: "gfonts://Inter@500"
-    id: font_normal
-    size: 22
-
-  - file: "gfonts://Inter@700"
-    id: font_bold
-    size: 26
-"""
+def _generate_fonts(device: DeviceConfig) -> str:
+    """
+    Generate font definitions including Material Design Icons fonts for icon widgets.
+    Collects all icon codes from the device and generates appropriate MDI fonts.
+    """
+    # Collect all unique icon codes from icon widgets
+    icon_codes = set()
+    for page in device.pages:
+        for widget in page.widgets:
+            wtype = (widget.type or "").lower()
+            if wtype == "icon":
+                props = widget.props or {}
+                code = props.get("code", "").strip()
+                if code:
+                    icon_codes.add(code)
+    
+    # Base fonts (Inter)
+    font_lines = [
+        "font:",
+        "  - file: \"gfonts://Inter@400\"",
+        "    id: font_small",
+        "    size: 18",
+        "",
+        "  - file: \"gfonts://Inter@500\"",
+        "    id: font_normal",
+        "    size: 22",
+        "",
+        "  - file: \"gfonts://Inter@700\"",
+        "    id: font_bold",
+        "    size: 26"
+    ]
+    
+    # Add MDI fonts if there are icon widgets
+    if icon_codes:
+        # Convert codes to Unicode escapes
+        glyphs = []
+        for code in sorted(icon_codes):
+            # code is like "F0595" - convert to "\U000F0595"
+            glyphs.append(f'"\\U000{code}"')
+        
+        glyph_list = ", ".join(glyphs)
+        
+        font_lines.extend([
+            "",
+            "  # Material Design Icons for icon widgets",
+            "  - file: \"gfonts://Material+Design+Icons\"",
+            "    id: font_mdi_medium",
+            "    size: 48",
+            f"    glyphs: [{glyph_list}]"
+        ])
+    
+    return "\n".join(font_lines)
 
 
 # Removed _generate_outputs_and_buzzer() - now in hardware template
@@ -266,13 +303,16 @@ def _generate_display_block(device: DeviceConfig) -> str:
     lines.append("display:")
     lines.append("  - platform: waveshare_epaper")
     lines.append("    id: epaper_display")
-    lines.append("    # Ensure these pins and model match your hardware/base config")
+    lines.append("    model: 7.50inv2")
     lines.append("    cs_pin: GPIO10")
-    lines.append("    busy_pin: GPIO3")
-    lines.append("    reset_pin: GPIO8")
-    lines.append("    dc_pin: GPIO4")
-    lines.append("    model: 7.50in-bV3")
-    lines.append("    update_interval: 0s")
+    lines.append("    dc_pin: GPIO11")
+    lines.append("    reset_pin:")
+    lines.append("      number: GPIO12")
+    lines.append("      inverted: false")
+    lines.append("    busy_pin:")
+    lines.append("      number: GPIO13")
+    lines.append("      inverted: true")
+    lines.append("    update_interval: never")
     lines.append(f"    rotation: {rotation}")
     lines.append("    lambda: |-")
     lines.append("      int page = id(display_page);")
