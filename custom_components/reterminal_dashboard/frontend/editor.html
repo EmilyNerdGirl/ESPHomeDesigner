@@ -1409,10 +1409,12 @@
         widget.props.color = "black";
       } else if (type === "sensor_text") {
         widget.type = "sensor_text";
-        widget.props.font_size = 18;
+        widget.props.label_font_size = 14;
+        widget.props.value_font_size = 20;
+        widget.props.value_format = "label_value";
         widget.props.color = "black";
-        widget.entity_id = "sensor.example";
-        widget.title = "Sensor";
+        widget.entity_id = "";
+        widget.title = "";
       } else if (type === "shape_rect") {
         widget.type = "shape_rect";
         widget.props.fill = false;
@@ -1697,16 +1699,30 @@
           let text = "";
           if (type === "sensor_text") {
             const entityId = widget.entity_id || "";
+            const label = widget.title || "";
+            const valueFormat = props.value_format || "value_only"; // "value_only", "label_value", or "label_newline_value"
+            
             if (hasHaBackend() && entityId) {
               const state = getEntityState(entityId);
-              console.log(`[Canvas] Rendering sensor_text: entity=${entityId}, state=${state}, title=${widget.title}`);
-              if (state !== null) {
-                text = state;
+              console.log(`[Canvas] Rendering sensor_text: entity=${entityId}, state=${state}, label=${label}, format=${valueFormat}`);
+              
+              if (state !== null && state !== undefined) {
+                // Format based on user preference
+                if (valueFormat === "label_value" && label) {
+                  text = `${label}: ${state}`;
+                } else if (valueFormat === "label_newline_value" && label) {
+                  text = `${label}\n${state}`;
+                } else {
+                  // value_only or no label
+                  text = state;
+                }
               } else {
-                text = widget.title || entityId || "sensor";
+                // No state available - show label or placeholder
+                text = label || entityId || "sensor";
               }
             } else {
-              text = widget.title || entityId || "sensor";
+              // No backend or no entity - show label or placeholder
+              text = label || entityId || "sensor";
             }
           } else {
             text = props.text || widget.title || "Text";
@@ -1890,6 +1906,10 @@
           entityInput.style.flex = "1";
           entityInput.addEventListener("input", () => {
             widget.entity_id = entityInput.value;
+            // Fetch entity state when entity ID changes
+            if (hasHaBackend() && Object.keys(entityStatesCache).length === 0) {
+              fetchEntityStates();
+            }
             renderCanvas();
             scheduleSnippetUpdate();
           });
@@ -1911,15 +1931,47 @@
           entityWrap.appendChild(entityRow);
           panel.appendChild(entityWrap);
           
-          addLabeledInput("Label", "text", widget.title || "", (v) => {
+          // Label (optional - can be cleared to show only value)
+          addLabeledInput("Label (leave empty for value only)", "text", widget.title || "", (v) => {
             widget.title = v;
             renderCanvas();
+            scheduleSnippetUpdate();
+          });
+          
+          // Value format dropdown
+          addSelect(
+            "Display format",
+            widget.props.value_format || "value_only",
+            ["value_only", "label_value", "label_newline_value"],
+            (val) => {
+              widget.props.value_format = val;
+              renderCanvas();
+              scheduleSnippetUpdate();
+            }
+          );
+          
+          // Separate font sizes for label and value
+          addLabeledInput("Label font size", "number", widget.props.label_font_size || 14, (v) => {
+            widget.props.label_font_size = parseInt(v || "14", 10) || 14;
+            renderCanvas();
+            scheduleSnippetUpdate();
+          });
+          
+          addLabeledInput("Value font size", "number", widget.props.value_font_size || 20, (v) => {
+            widget.props.value_font_size = parseInt(v || "20", 10) || 20;
+            renderCanvas();
+            scheduleSnippetUpdate();
+          });
+        } else {
+          // For regular text widgets, use single font size
+          addLabeledInput("Font size", "number", widget.props.font_size || 16, (v) => {
+            widget.props.font_size = parseInt(v || "16", 10) || 16;
+            renderCanvas();
+            scheduleSnippetUpdate();
           });
         }
-        addLabeledInput("Font size", "number", widget.props.font_size || 16, (v) => {
-          widget.props.font_size = parseInt(v || "16", 10) || 16;
-          renderCanvas();
-        });
+        
+        if (type === "text") {
         addSelect("Text color", widget.props.color || "black", ["black", "white", "gray"], (val) => {
           widget.props.color = val;
           renderCanvas();
@@ -2469,10 +2521,15 @@
 
           row.addEventListener("click", () => {
             widget.entity_id = e.entity_id;
-            if (!widget.title) {
-              widget.title = e.name || "";
-            }
+            // Always update title to entity name (user can customize after)
+            widget.title = e.name || e.entity_id || "";
             inputEl.value = widget.entity_id;
+            
+            // Trigger entity state fetch if not already done
+            if (Object.keys(entityStatesCache).length === 0) {
+              fetchEntityStates();
+            }
+            
             renderCanvas();
             renderPropertiesPanel();
             scheduleSnippetUpdate();
