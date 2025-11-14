@@ -180,6 +180,15 @@ class ReTerminalImportSnippetView(HomeAssistantView):
             device = yaml_to_layout(yaml_snippet)
         except ValueError as exc:
             code = str(exc)
+            if code == "invalid_yaml":
+                msg = "Invalid YAML syntax. Check for indentation errors."
+            elif code == "unrecognized_display_structure":
+                msg = "Could not find display: block with id: epaper_display and lambda."
+            elif code == "no_pages_found":
+                msg = "No page blocks found. Expected 'if (page == 0) { ... }' structure in lambda."
+            else:
+                msg = "Snippet does not match expected reterminal_dashboard pattern."
+            
             if code in (
                 "invalid_yaml",
                 "unrecognized_display_structure",
@@ -188,10 +197,7 @@ class ReTerminalImportSnippetView(HomeAssistantView):
                 return self._json(
                     {
                         "error": code,
-                        "message": (
-                            "Snippet does not match expected reterminal_dashboard pattern. "
-                            "Ensure it uses display_page and a compatible display lambda."
-                        ),
+                        "message": msg,
                     },
                     status_code=HTTPStatus.BAD_REQUEST,
                 )

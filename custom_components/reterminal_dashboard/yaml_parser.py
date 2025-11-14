@@ -92,7 +92,9 @@ def yaml_to_layout(snippet: str) -> DeviceConfig:
     lambda_lines = [line.rstrip("\n") for line in lambda_src.split("\n")]
     pages = _parse_pages_from_lambda(lambda_lines)
 
-    if not pages:
+    # Allow empty pages - we found page blocks even if they have no widgets
+    # But if we found NO page blocks at all, that's an error
+    if pages is None:
         raise ValueError("no_pages_found")
 
     device = DeviceConfig(
