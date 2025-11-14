@@ -49,11 +49,34 @@ class ReTerminalDashboardPanelView(HomeAssistantView):
     async def get(self, request) -> Any:  # type: ignore[override]
         """Return the full featured editor HTML.
         
-        This serves the complete editor with all widgets and features.
+        This reads and serves the complete standalone editor.html from www/ directory.
         """
         _LOGGER.info("Panel view accessed successfully")
         
-        # Generate the complete HTML with all features
+        # Try to read the full editor.html from www directory
+        import os
+        from pathlib import Path
+        
+        # Get the integration directory
+        integration_dir = Path(__file__).parent.parent.parent / "www" / "reterminal_dashboard_panel"
+        editor_path = integration_dir / "editor.html"
+        
+        if editor_path.exists():
+            try:
+                html = editor_path.read_text(encoding="utf-8")
+                _LOGGER.debug("Serving complete editor.html from: %s", editor_path)
+                return web.Response(
+                    body=html,
+                    status=200,
+                    content_type="text/html",
+                )
+            except Exception as e:
+                _LOGGER.error("Failed to read editor.html: %s", e)
+        else:
+            _LOGGER.warning("editor.html not found at: %s", editor_path)
+        
+        # Fallback: generate embedded HTML
+        _LOGGER.info("Using embedded editor HTML")
         html = self._generate_full_editor_html()
         
         return web.Response(
@@ -917,3 +940,51 @@ body {
   color: var(--muted);
 }
 """
+
+
+class ReTerminalDashboardFontView(HomeAssistantView):
+    """Serve the MDI font file for the editor."""
+
+    url = f"{PANEL_URL_PATH}/materialdesignicons-webfont.ttf"
+    name = "reterminal_dashboard:panel:font"
+    requires_auth = False  # Font is a public asset
+    cors_allowed = False
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Store hass if needed later."""
+        self.hass = hass
+
+    async def get(self, request) -> Any:  # type: ignore[override]
+        """Serve the MDI font file."""
+        from pathlib import Path
+        
+        # Get the font file path
+        integration_dir = Path(__file__).parent.parent.parent / "www" / "reterminal_dashboard_panel"
+        font_path = integration_dir / "materialdesignicons-webfont.ttf"
+        
+        if not font_path.exists():
+            _LOGGER.error("Font file not found at: %s", font_path)
+            return web.Response(
+                body=b"Font file not found",
+                status=404,
+                content_type="text/plain",
+            )
+        
+        try:
+            font_data = font_path.read_bytes()
+            _LOGGER.debug("Serving font file from: %s (%d bytes)", font_path, len(font_data))
+            return web.Response(
+                body=font_data,
+                status=200,
+                content_type="font/ttf",
+                headers={
+                    "Cache-Control": "public, max-age=31536000",  # Cache for 1 year
+                }
+            )
+        except Exception as e:
+            _LOGGER.error("Failed to read font file: %s", e)
+            return web.Response(
+                body=b"Failed to read font file",
+                status=500,
+                content_type="text/plain",
+            )

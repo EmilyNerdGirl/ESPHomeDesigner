@@ -587,18 +587,24 @@
   </style>
 
   <!-- Load Material Design Icons TTF (for editor preview only).
-       Works in three scenarios:
+       Works in multiple scenarios (tries in order):
        1) Offline file:// usage -> loads ./materialdesignicons-webfont.ttf next to this HTML file.
-       2) Home Assistant /local deployment.
-       3) HACS /hacsfiles deployment.
-       At runtime on ESPHome, users must still place the same TTF in their ESPHome fonts/ directory. -->
+       2) ESPHome fonts directory -> /local/esphome/fonts/materialdesignicons-webfont.ttf
+       3) Home Assistant /local deployment -> /local/reterminal_dashboard/materialdesignicons-webfont.ttf
+       4) HACS deployment -> /hacsfiles/reterminal_dashboard/materialdesignicons-webfont.ttf
+       5) Panel view route -> /reterminal-dashboard/materialdesignicons-webfont.ttf
+       
+       NOTE: Users should place materialdesignicons-webfont.ttf in /config/esphome/fonts/
+       for both ESPHome device usage AND editor preview. -->
   <style>
     @font-face {
       font-family: "MDI";
       src:
         url("materialdesignicons-webfont.ttf") format("truetype"),
+        url("/local/esphome/fonts/materialdesignicons-webfont.ttf") format("truetype"),
         url("/local/reterminal_dashboard/materialdesignicons-webfont.ttf") format("truetype"),
-        url("/hacsfiles/reterminal_dashboard/materialdesignicons-webfont.ttf") format("truetype");
+        url("/hacsfiles/reterminal_dashboard/materialdesignicons-webfont.ttf") format("truetype"),
+        url("/reterminal-dashboard/materialdesignicons-webfont.ttf") format("truetype");
       font-weight: normal;
       font-style: normal;
     }
@@ -774,6 +780,32 @@
       </div>
       <div class="modal-actions">
         <button id="importSnippetConfirm" class="btn">Import</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Page settings modal -->
+  <div id="pageSettingsModal" class="modal-backdrop hidden">
+    <div class="modal" style="max-width: 500px; height: auto;">
+      <div class="modal-header">
+        <div>Page Settings</div>
+        <button id="pageSettingsClose" class="btn btn-secondary">Close</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <div class="prop-label">Page Name</div>
+          <input id="pageSettingsName" class="prop-input" type="text" placeholder="Page name" />
+        </div>
+        <div class="field">
+          <div class="prop-label">Refresh Interval (seconds)</div>
+          <input id="pageSettingsRefresh" class="prop-input" type="number" min="0" step="1" placeholder="Auto (uses ESPHome default)" />
+          <div style="font-size: 9px; color: var(--muted); margin-top: 2px;">
+            Leave empty for default. Set to 0 for manual refresh only. Recommended: 60-300 seconds.
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="pageSettingsSave" class="btn">Save</button>
       </div>
     </div>
   </div>
@@ -1255,6 +1287,8 @@
       pages.forEach((page, index) => {
         const item = document.createElement("div");
         item.className = "item" + (index === currentPageIndex ? " active" : "");
+        
+        // Main click: select page
         item.onclick = () => {
           currentPageIndex = index;
           selectedWidgetId = null;
@@ -1263,6 +1297,7 @@
           renderPropertiesPanel();
           scheduleSnippetUpdate();
         };
+        
         const label = document.createElement("span");
         label.className = "label";
         label.textContent = page.name;
@@ -1271,6 +1306,21 @@
         tag.textContent = page.id;
         item.appendChild(label);
         item.appendChild(tag);
+        
+        // Add edit button for page settings
+        const editBtn = document.createElement("button");
+        editBtn.textContent = "⚙";
+        editBtn.className = "btn btn-secondary";
+        editBtn.style.padding = "1px 4px";
+        editBtn.style.fontSize = "8px";
+        editBtn.style.marginLeft = "auto";
+        editBtn.title = "Page settings";
+        editBtn.onclick = (e) => {
+          e.stopPropagation();
+          openPageSettingsModal(page);
+        };
+        item.appendChild(editBtn);
+        
         pageListEl.appendChild(item);
       });
       const page = getCurrentPage();
@@ -1752,10 +1802,45 @@
           });
         }
         if (type === "sensor_text") {
-          addLabeledInput("Entity ID", "text", widget.entity_id || "", (v) => {
-            widget.entity_id = v;
+          // Entity ID with picker button
+          const entityWrap = document.createElement("div");
+          entityWrap.className = "field";
+          const entityLbl = document.createElement("div");
+          entityLbl.className = "prop-label";
+          entityLbl.textContent = "Entity ID";
+          
+          const entityRow = document.createElement("div");
+          entityRow.style.display = "flex";
+          entityRow.style.gap = "4px";
+          
+          const entityInput = document.createElement("input");
+          entityInput.className = "prop-input";
+          entityInput.type = "text";
+          entityInput.value = widget.entity_id || "";
+          entityInput.style.flex = "1";
+          entityInput.addEventListener("input", () => {
+            widget.entity_id = entityInput.value;
             renderCanvas();
+            scheduleSnippetUpdate();
           });
+          
+          const pickerBtn = document.createElement("button");
+          pickerBtn.className = "btn btn-secondary";
+          pickerBtn.textContent = "⋮⋮⋮";
+          pickerBtn.style.padding = "5px 8px";
+          pickerBtn.style.fontSize = "10px";
+          pickerBtn.type = "button";
+          pickerBtn.title = "Pick from Home Assistant entities";
+          pickerBtn.addEventListener("click", () => {
+            openEntityPickerForWidget(widget, entityInput);
+          });
+          
+          entityRow.appendChild(entityInput);
+          entityRow.appendChild(pickerBtn);
+          entityWrap.appendChild(entityLbl);
+          entityWrap.appendChild(entityRow);
+          panel.appendChild(entityWrap);
+          
           addLabeledInput("Label", "text", widget.title || "", (v) => {
             widget.title = v;
             renderCanvas();
@@ -2462,6 +2547,64 @@
       }
     };
 
+    // Page settings modal
+    let currentPageSettingsTarget = null;
+
+    function openPageSettingsModal(page) {
+      currentPageSettingsTarget = page;
+      const modal = document.getElementById("pageSettingsModal");
+      const nameInput = document.getElementById("pageSettingsName");
+      const refreshInput = document.getElementById("pageSettingsRefresh");
+      
+      if (nameInput) nameInput.value = page.name || "";
+      if (refreshInput) {
+        refreshInput.value = (page.refresh_s != null && page.refresh_s > 0) ? page.refresh_s : "";
+      }
+      
+      if (modal) modal.classList.remove("hidden");
+    }
+
+    function closePageSettingsModal() {
+      const modal = document.getElementById("pageSettingsModal");
+      if (modal) modal.classList.add("hidden");
+      currentPageSettingsTarget = null;
+    }
+
+    function savePageSettings() {
+      if (!currentPageSettingsTarget) return;
+      
+      const nameInput = document.getElementById("pageSettingsName");
+      const refreshInput = document.getElementById("pageSettingsRefresh");
+      
+      if (nameInput) {
+        currentPageSettingsTarget.name = nameInput.value || "Page";
+      }
+      
+      if (refreshInput) {
+        const val = refreshInput.value.trim();
+        if (val === "") {
+          currentPageSettingsTarget.refresh_s = null;
+        } else {
+          const num = parseInt(val, 10);
+          currentPageSettingsTarget.refresh_s = (num >= 0) ? num : null;
+        }
+      }
+      
+      renderPagesSidebar();
+      scheduleSnippetUpdate();
+      closePageSettingsModal();
+    }
+
+    // Wire up page settings modal
+    const pageSettingsClose = document.getElementById("pageSettingsClose");
+    const pageSettingsSave = document.getElementById("pageSettingsSave");
+    if (pageSettingsClose) {
+      pageSettingsClose.addEventListener("click", closePageSettingsModal);
+    }
+    if (pageSettingsSave) {
+      pageSettingsSave.addEventListener("click", savePageSettings);
+    }
+
     async function loadLayoutFromBackend() {
       try {
         const resp = await fetch("/api/reterminal_dashboard/layout");
@@ -2487,6 +2630,10 @@
 
     loadLayoutFromBackend().then(() => {
       updateSnippet(true);
+      // Load entities for picker if HA backend is available
+      loadHaEntitiesIfNeeded().catch(err => {
+        console.warn("Entity loading failed during init:", err);
+      });
     });
   </script>
 </body>

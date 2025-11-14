@@ -163,6 +163,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.http.register_view(ReTerminalDashboardPanelView(hass))
     _LOGGER.info("%s: Panel view registered at /reterminal-dashboard", DOMAIN)
 
+    # Register the font file view for the editor
+    from .panel import ReTerminalDashboardFontView
+    hass.http.register_view(ReTerminalDashboardFontView(hass))
+    _LOGGER.info("%s: Font view registered at /reterminal-dashboard/materialdesignicons-webfont.ttf", DOMAIN)
+
     # Register services (idempotent)
     async_register_services(hass, storage)
 
