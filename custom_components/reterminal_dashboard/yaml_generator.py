@@ -273,7 +273,7 @@ def _generate_scripts(device: DeviceConfig) -> str:
                   interval = 60;
                 }}
                 ESP_LOGI("refresh", "Next refresh in %d seconds for page %d", interval, page);
-            - delay: !lambda 'return std::chrono::seconds(interval);'
+            - delay: !lambda 'return interval * 1000;'
             - component.update: epaper_display
             - script.execute: manage_run_and_sleep
           else:
