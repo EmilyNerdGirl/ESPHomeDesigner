@@ -82,6 +82,8 @@ Done! Your custom dashboard is now running on the reTerminal.
 - **Icon** - Material Design Icons (48x48)
 - **Shapes** - Rectangles, filled rectangles, circles, filled circles, lines
 - **Image** - Display photos and images with optional color inversion
+  - Widget frame size sets ESPHome `resize:` parameter automatically
+  - Images are resized during compilation (quality preserved with FLOYDSTEINBERG dithering)
 - **More coming** - Weather cards, graphs...
 
 ## Features

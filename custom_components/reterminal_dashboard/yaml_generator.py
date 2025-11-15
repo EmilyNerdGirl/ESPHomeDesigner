@@ -140,7 +140,10 @@ def _generate_fonts(device: DeviceConfig) -> str:
                     # Generate safe ID from path
                     safe_id = path.replace("/", "_").replace(".", "_").replace("-", "_").replace(" ", "_")
                     safe_id = f"img_{safe_id}"
-                    image_paths[path] = safe_id
+                    # Store path with dimensions for resize
+                    width = widget.width or 100
+                    height = widget.height or 100
+                    image_paths[path] = {"id": safe_id, "width": width, "height": height}
     
     # Base fonts (Inter)
     font_lines = [
@@ -183,9 +186,13 @@ def _generate_fonts(device: DeviceConfig) -> str:
     # Add image definitions if there are image widgets
     if image_paths:
         result += "\n\n\nimage:"
-        for path, img_id in sorted(image_paths.items()):
+        for path, img_data in sorted(image_paths.items()):
+            img_id = img_data["id"]
+            width = img_data["width"]
+            height = img_data["height"]
             result += f"\n  - file: \"{path}\""
             result += f"\n    id: {img_id}"
+            result += f"\n    resize: {width}x{height}"
             result += "\n    type: BINARY"
             result += "\n    dither: FLOYDSTEINBERG"
     
@@ -427,14 +434,15 @@ def _append_widget_render(dst: List[str], indent: str, widget: WidgetConfig) -> 
 
     # Determine base color polarity from props.color and invert.
     base_color = (props.get("color") or "").lower()
+    # E-Paper: COLOR_ON = black ink, COLOR_OFF = white (no ink)
     if base_color == "white":
-        fg = "COLOR_ON"
+        fg = "COLOR_OFF"  # White = no ink
     elif base_color == "gray":
-        # For grayscale we still use COLOR_ON on b/w display; left for future patterns.
+        # For grayscale we still use black ink; left for future patterns.
         fg = "COLOR_ON"
     else:
-        # Default to "dark ink" style
-        fg = "COLOR_OFF"
+        # Default to black ink
+        fg = "COLOR_ON"
 
     if props.get("invert"):
         fg = "COLOR_OFF" if fg == "COLOR_ON" else "COLOR_ON"
@@ -575,7 +583,7 @@ def _append_widget_render(dst: List[str], indent: str, widget: WidgetConfig) -> 
             dst.append(f'{indent}it.rectangle({x}, {y}, {w}, {h}, {fg});')
             return
         
-        # Generate safe ID from path
+        # Generate safe ID from path (same logic as in _generate_fonts)
         safe_id = path.replace("/", "_").replace(".", "_").replace("-", "_").replace(" ", "_")
         safe_id = f"img_{safe_id}"
         
@@ -586,7 +594,7 @@ def _append_widget_render(dst: List[str], indent: str, widget: WidgetConfig) -> 
         dst.append(f'{indent}// widget:image id:{widget.id} type:image x:{x} y:{y} w:{w} h:{h} path:"{path}" invert:{invert}')
         
         if invert:
-            dst.append(f'{indent}it.image({x}, {y}, id({safe_id}), COLOR_ON, COLOR_OFF);')
+            dst.append(f'{indent}it.image({x}, {y}, id({safe_id}), COLOR_OFF, COLOR_ON);')
         else:
             dst.append(f'{indent}it.image({x}, {y}, id({safe_id}));')
         return

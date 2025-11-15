@@ -2025,7 +2025,8 @@
         helpWrap.style.color = "var(--muted)";
         helpWrap.style.marginBottom = "8px";
         helpWrap.innerHTML = "💡 Enter ESPHome image path, e.g.:<br/>" +
-          "<code style='background:#f0f0f0;padding:2px 4px;border-radius:2px;'>/config/esphome/images/photo.jpg</code>";
+          "<code style='background:#f0f0f0;padding:2px 4px;border-radius:2px;'>/config/esphome/images/photo.jpg</code><br/>" +
+          "<span style='color:#4a9eff;'>ℹ️ Widget size controls ESPHome resize parameter</span>";
         panel.appendChild(helpWrap);
         
         addLabeledInput("Image path", "text", widget.props.path || "", (v) => {
