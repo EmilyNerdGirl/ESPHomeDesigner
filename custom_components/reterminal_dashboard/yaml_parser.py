@@ -71,6 +71,12 @@ class ParsedWidget:
     path: str | None = None  # For image widgets
     format: str | None = None  # For datetime widgets
     invert: bool = False  # For image widgets
+    # Sensor text specific properties
+    label_font_size: int | None = None
+    value_font_size: int | None = None
+    value_format: str | None = None  # For sensor_text widgets: value_only, label_value, label_newline_value
+    # Font family for text widgets
+    font_family: str | None = None
 
 
 def yaml_to_layout(snippet: str) -> DeviceConfig:
@@ -142,10 +148,12 @@ def yaml_to_layout(snippet: str) -> DeviceConfig:
                 props["fit_icon_to_frame"] = True
                 props["size"] = 40
                 props["color"] = "black"
+            if pw.font_family:
+                props["font_family"] = pw.font_family
             if pw.type == "sensor_text":
-                props["label_font_size"] = 14
-                props["value_font_size"] = 20
-                props["value_format"] = "label_value"
+                props["label_font_size"] = pw.label_font_size or 14
+                props["value_font_size"] = pw.value_font_size or 20
+                props["value_format"] = pw.value_format or "label_value"
                 props["color"] = "black"
             elif pw.type == "datetime":
                 # datetime widget properties
@@ -362,6 +370,25 @@ def _parse_widget_line(line: str) -> ParsedWidget | None:
         path = meta.get("path")
         format_val = meta.get("format")
         invert_val = meta.get("invert", "false").lower() in ("true", "1", "yes")
+        font_family = meta.get("font_family")
+        
+        # Extract sensor_text specific properties
+        label_font = meta.get("label_font")
+        value_font = meta.get("value_font")
+        
+        # Attempt to parse font sizes as integers
+        label_font_size = None
+        value_font_size = None
+        if label_font:
+            try:
+                label_font_size = int(label_font)
+            except ValueError:
+                pass
+        if value_font:
+            try:
+                value_font_size = int(value_font)
+            except ValueError:
+                pass
 
         return ParsedWidget(
             id=wid,
@@ -378,6 +405,10 @@ def _parse_widget_line(line: str) -> ParsedWidget | None:
             path=path or None,
             format=format_val or None,
             invert=invert_val,
+            label_font_size=label_font_size,
+            value_font_size=value_font_size,
+            value_format=format_val or None,  # Use format_val for sensor_text value_format
+            font_family=font_family,
         )
 
     # Pattern 2: simple printf (VERY conservative)

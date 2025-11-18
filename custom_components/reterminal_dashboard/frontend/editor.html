@@ -4,6 +4,12 @@
   <meta charset="UTF-8" />
   <title>reTerminal Dashboard Designer · YAML Snippet Editor</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <!-- Google Fonts for text preview -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Roboto:wght@400;500;700&family=Open+Sans:wght@400;500;700&family=Lato:wght@400;700&family=Montserrat:wght@400;500;700&family=Poppins:wght@400;500;700&display=swap" rel="stylesheet">
+  
   <style>
     :root {
       --bg: #0f1115;
@@ -2311,6 +2317,7 @@
             const valueFormat = props.value_format || "value_only";
             const labelFontSize = props.label_font_size || 14;
             const valueFontSize = props.value_font_size || 20;
+            const fontFamily = props.font_family || "Inter";
             
             let displayValue = "23.5°C";
             
@@ -2328,6 +2335,7 @@
             const body = document.createElement("div");
             body.style.color = colorStyle;
             body.style.opacity = opacity;
+            body.style.fontFamily = fontFamily + ", sans-serif";
             
             if (valueFormat === "label_value" && label) {
               body.style.display = "flex";
@@ -2367,8 +2375,10 @@
             el.appendChild(body);
           } else {
             const fontSize = props.font_size || 16;
+            const fontFamily = props.font_family || "Inter";
             const body = document.createElement("div");
             body.style.fontSize = fontSize + "px";
+            body.style.fontFamily = fontFamily + ", sans-serif";
             body.style.color = colorStyle;
             body.style.opacity = opacity;
             body.textContent = props.text || widget.title || "Text";
@@ -2495,26 +2505,53 @@
         panel.appendChild(fitWrap);
 
         const iconPickerData = [
-          { code: "F0594", name: "weather-sunny" },
+          // Battery icons
+          { code: "F0079", name: "battery-outline" },
+          { code: "F007A", name: "battery-10" },
+          { code: "F007B", name: "battery-20" },
+          { code: "F007C", name: "battery-30" },
+          { code: "F007D", name: "battery-40" },
+          { code: "F007E", name: "battery-50" },
+          { code: "F007F", name: "battery-60" },
+          { code: "F0080", name: "battery-70" },
+          { code: "F0081", name: "battery-80" },
+          { code: "F0082", name: "battery-90" },
+          { code: "F0083", name: "battery-100" },
+          // Weather icons
+          { code: "F0591", name: "weather-sunny" },
+          { code: "F0594", name: "weather-night-clear" },
           { code: "F0595", name: "weather-cloudy" },
+          { code: "F0599", name: "weather-partly-cloudy" },
           { code: "F0596", name: "weather-rainy" },
           { code: "F0590", name: "weather-snowy" },
-          { code: "F067E", name: "weather-lightning" },
-          { code: "F0597", name: "weather-fog" },
-          { code: "F0F2F", name: "weather-windy" },
-          { code: "F0598", name: "weather-partly-cloudy" },
-          { code: "F0F31", name: "weather-night" },
-          { code: "F0599", name: "weather-hail" },
+          { code: "F192D", name: "weather-snowy-heavy" },
+          { code: "F192C", name: "weather-fog" },
+          { code: "F067E", name: "weather-night" },
+          { code: "F0598", name: "weather-lightning" },
+          { code: "F0597", name: "weather-windy" },
+          { code: "F0D9B", name: "cloud" },
+          { code: "F06A1", name: "weather-pouring" },
+          { code: "F0F2F", name: "weather-windy-variant" },
+          { code: "F0F31", name: "weather-night-partly-cloudy" },
           { code: "F0F33", name: "weather-tornado" },
           { code: "F0593", name: "weather-hurricane" },
-          { code: "F0E6E", name: "weather-pouring" },
+          { code: "F0E6E", name: "weather-hail" },
           { code: "F067F", name: "weather-lightning-rainy" },
-          { code: "F0F30", name: "weather-windy-variant" },
-          { code: "F0590", name: "snowflake" },
+          { code: "F0F30", name: "weather-dust" },
           { code: "F059D", name: "white-balance-sunny" },
           { code: "F0F32", name: "weather-snowy-rainy" },
           { code: "F0E6D", name: "weather-partly-rainy" },
-          { code: "F0F34", name: "weather-snowy-heavy" },
+          { code: "F0F34", name: "weather-sunset" },
+          // Connectivity & Power
+          { code: "F050F", name: "power-plug" },
+          { code: "F043C", name: "wifi" },
+          { code: "F15FA", name: "signal-variant" },
+          // Sensors
+          { code: "F058C", name: "brightness-percent" },
+          { code: "F09A1", name: "thermometer-lines" },
+          { code: "F058E", name: "water-percent" },
+          { code: "F042B", name: "weather-thermometer" },
+          { code: "F05D6", name: "thermometer" },
           { code: "F010C", name: "thermometer" },
           { code: "F0E8B", name: "home-thermometer" },
           { code: "F10BF", name: "temperature-celsius" },
@@ -3294,8 +3331,22 @@
         }
         
         if (type === "text") {
+          addSelect("Font family", widget.props.font_family || "Inter", ["Inter", "Roboto", "Open Sans", "Lato", "Montserrat", "Poppins"], (val) => {
+            widget.props.font_family = val;
+            renderCanvas();
+            scheduleSnippetUpdate();
+          });
+          
           addLabeledInput("Font size", "number", widget.props.font_size || 16, (v) => {
             widget.props.font_size = parseInt(v || "16", 10) || 16;
+            renderCanvas();
+            scheduleSnippetUpdate();
+          });
+        }
+        
+        if (type === "sensor_text") {
+          addSelect("Font family", widget.props.font_family || "Inter", ["Inter", "Roboto", "Open Sans", "Lato", "Montserrat", "Poppins"], (val) => {
+            widget.props.font_family = val;
             renderCanvas();
             scheduleSnippetUpdate();
           });

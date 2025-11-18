@@ -53,6 +53,7 @@ class ReTerminalDashboardPanelView(HomeAssistantView):
         Tries multiple locations in order of priority.
         """
         from pathlib import Path
+        import aiofiles
         
         # Priority 1: Look in integration's own frontend/ directory (bundled with integration)
         integration_dir = Path(__file__).parent / "frontend"
@@ -66,7 +67,8 @@ class ReTerminalDashboardPanelView(HomeAssistantView):
         # Try integration directory first (preferred - always available)
         if editor_path_integration.exists():
             try:
-                html = editor_path_integration.read_text(encoding="utf-8")
+                async with aiofiles.open(editor_path_integration, mode='r', encoding='utf-8') as f:
+                    html = await f.read()
                 _LOGGER.info("✓ Serving editor from integration: %s (%d bytes)", editor_path_integration, len(html))
                 return web.Response(
                     body=html,
@@ -84,7 +86,8 @@ class ReTerminalDashboardPanelView(HomeAssistantView):
         # Try www directory (fallback for manual deployment)
         if editor_path_www.exists():
             try:
-                html = editor_path_www.read_text(encoding="utf-8")
+                async with aiofiles.open(editor_path_www, mode='r', encoding='utf-8') as f:
+                    html = await f.read()
                 _LOGGER.info("✓ Serving editor from www: %s (%d bytes)", editor_path_www, len(html))
                 return web.Response(
                     body=html,

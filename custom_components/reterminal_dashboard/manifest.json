@@ -18,6 +18,7 @@
   "iot_class": "local_push",
   "integration_type": "hub",
   "requirements": [
+    "aiofiles==24.1.0"
   ],
   "loggers": [
     "custom_components.reterminal_dashboard"

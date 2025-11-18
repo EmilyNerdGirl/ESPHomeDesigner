@@ -120,6 +120,7 @@ def _generate_fonts(device: DeviceConfig) -> str:
     Generate font definitions including Material Design Icons fonts for icon widgets.
     Collects all icon codes from the device and generates appropriate MDI fonts.
     Also generates image definitions for image widgets.
+    Supports font family selection - uses the first font_family found in widgets, defaults to Inter.
     """
     # Collect all unique icon codes from icon widgets
     icon_codes = set()
@@ -127,6 +128,7 @@ def _generate_fonts(device: DeviceConfig) -> str:
     image_paths = {}
     icon_sizes = set()  # Track unique icon sizes
     text_sizes = set()  # Track unique text font sizes
+    selected_font_family = "Inter"  # Default font family
     
     for page in device.pages:
         for widget in page.widgets:
@@ -148,12 +150,24 @@ def _generate_fonts(device: DeviceConfig) -> str:
                 # Collect icon size if specified
                 size = int(props.get("size", 48) or 48)
                 icon_sizes.add(size)
-            elif wtype in ("text", "label"):
+            elif wtype in ("text", "label", "sensor_text"):
                 props = widget.props or {}
+                # Get font family from first widget that has it
+                family = props.get("font_family")
+                if family and selected_font_family == "Inter":
+                    selected_font_family = family
                 # Collect text font size if specified
-                size = int(props.get("font_size", 0) or 0)
-                if size > 0:
-                    text_sizes.add(size)
+                if wtype in ("text", "label"):
+                    size = int(props.get("font_size", 0) or 0)
+                    if size > 0:
+                        text_sizes.add(size)
+                else:  # sensor_text
+                    label_size = int(props.get("label_font_size", 0) or 0)
+                    value_size = int(props.get("value_font_size", 0) or 0)
+                    if label_size > 0:
+                        text_sizes.add(label_size)
+                    if value_size > 0:
+                        text_sizes.add(value_size)
             elif wtype == "image":
                 props = widget.props or {}
                 path = props.get("path", "").strip()
@@ -166,18 +180,18 @@ def _generate_fonts(device: DeviceConfig) -> str:
                     height = widget.height or 100
                     image_paths[path] = {"id": safe_id, "width": width, "height": height}
     
-    # Base fonts (Inter) - always include the standard sizes
+    # Base fonts - use selected font family for all standard sizes
     font_lines = [
         "font:",
-        "  - file: \"gfonts://Inter@400\"",
+        f"  - file: \"gfonts://{selected_font_family}@400\"",
         "    id: font_small",
         "    size: 19",
         "",
-        "  - file: \"gfonts://Inter@500\"",
+        f"  - file: \"gfonts://{selected_font_family}@500\"",
         "    id: font_normal",
         "    size: 22",
         "",
-        "  - file: \"gfonts://Inter@700\"",
+        f"  - file: \"gfonts://{selected_font_family}@700\"",
         "    id: font_header",
         "    size: 24"
     ]
@@ -198,7 +212,7 @@ def _generate_fonts(device: DeviceConfig) -> str:
             else:
                 weight = "700"  # Bold
             font_lines.extend([
-                f"  - file: \"gfonts://Inter@{weight}\"",
+                f"  - file: \"gfonts://{selected_font_family}@{weight}\"",
                 f"    id: font_text_{size}",
                 f"    size: {size}"
             ])
@@ -654,10 +668,11 @@ def _append_widget_render(dst: List[str], indent: str, widget: WidgetConfig) -> 
             return
         font = _resolve_font(props)
         font_size = int(props.get("font_size", 12) or 12)
+        font_family = props.get("font_family") or "Inter"
         color_prop = (props.get("color") or "black").lower()
         font_style = props.get("font_style") or "regular"
-        # Add marker comment for parser with all properties
-        content.append(f'{indent}// widget:text id:{widget.id} type:text x:{x} y:{y} w:{w} h:{h} text:"{text}" font_size:{font_size} color:{color_prop} font_style:{font_style}')
+        # Add marker comment for parser with all properties including font_family
+        content.append(f'{indent}// widget:text id:{widget.id} type:text x:{x} y:{y} w:{w} h:{h} text:"{text}" font_size:{font_size} font_family:{font_family} color:{color_prop} font_style:{font_style}')
         content.append(f'{indent}it.print({x}, {y}, {font}, {fg}, "{text}");')
         _wrap_with_condition(dst, indent, widget, content)
         return
@@ -708,13 +723,14 @@ def _append_widget_render(dst: List[str], indent: str, widget: WidgetConfig) -> 
         label_font_size = int(props.get("label_font_size", 14) or 14)
         value_font_size = int(props.get("value_font_size", 20) or 20)
         value_format = props.get("value_format", "label_value")
+        font_family = props.get("font_family") or "Inter"
         
         if entity_id:
             # Generate safe ID from entity_id
             safe_id = entity_id.replace(".", "_").replace("-", "_")
             
-            # Add marker comment for parser with font sizes
-            content.append(f'{indent}// widget:sensor_text id:{widget.id} type:sensor_text x:{x} y:{y} w:{w} h:{h} ent:{entity_id} title:"{label}" label_font:{label_font_size} value_font:{value_font_size} format:{value_format}')
+            # Add marker comment for parser with font sizes and font_family
+            content.append(f'{indent}// widget:sensor_text id:{widget.id} type:sensor_text x:{x} y:{y} w:{w} h:{h} ent:{entity_id} title:"{label}" label_font:{label_font_size} value_font:{value_font_size} format:{value_format} font_family:{font_family}')
             
             if value_format == "label_newline_value" and label:
                 # Label on one line, value on another - use separate fonts
@@ -737,8 +753,8 @@ def _append_widget_render(dst: List[str], indent: str, widget: WidgetConfig) -> 
             # No entity_id configured - show placeholder
             placeholder = label or "sensor"
             font = _resolve_font_by_size(value_font_size)
-            # Add marker comment for parser with font sizes
-            content.append(f'{indent}// widget:sensor_text id:{widget.id} type:sensor_text x:{x} y:{y} w:{w} h:{h} title:"{label}" label_font:{label_font_size} value_font:{value_font_size} format:{value_format}')
+            # Add marker comment for parser with font sizes and font_family
+            content.append(f'{indent}// widget:sensor_text id:{widget.id} type:sensor_text x:{x} y:{y} w:{w} h:{h} title:"{label}" label_font:{label_font_size} value_font:{value_font_size} format:{value_format} font_family:{font_family}')
             content.append(f'{indent}// No entity_id configured for this sensor_text widget')
             content.append(f'{indent}it.printf({x}, {y}, {font}, {fg}, "{placeholder}: N/A");')
         _wrap_with_condition(dst, indent, widget, content)
