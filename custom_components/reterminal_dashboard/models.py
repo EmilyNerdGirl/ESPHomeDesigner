@@ -203,6 +203,9 @@ class DeviceConfig:
     device_id: str
     api_token: str
     name: str = "reTerminal"
+    deep_sleep_start: int = 0
+    deep_sleep_end: int = 5
+    wifi_power_save: bool = False
     pages: List[PageConfig] = field(default_factory=list)
     current_page: int = 0
 
@@ -214,6 +217,15 @@ class DeviceConfig:
     sleep_enabled: bool = False
     sleep_start_hour: int = 0
     sleep_end_hour: int = 5
+
+    # Deep Sleep / Battery Saver
+    deep_sleep_enabled: bool = False
+    deep_sleep_interval: int = 600  # Default 10 minutes
+    
+    # Refresh Strategy
+    manual_refresh_only: bool = False
+    no_refresh_start_hour: int | None = None
+    no_refresh_end_hour: int | None = None
 
     def ensure_pages(self, min_pages: int = DEFAULT_PAGES) -> None:
         """Ensure at least min_pages exist; add simple default pages if missing."""
@@ -268,6 +280,13 @@ class DeviceConfig:
             "sleep_enabled": self.sleep_enabled,
             "sleep_start_hour": self.sleep_start_hour,
             "sleep_end_hour": self.sleep_end_hour,
+            "deep_sleep_enabled": self.deep_sleep_enabled,
+            "deep_sleep_interval": self.deep_sleep_interval,
+            "deep_sleep_enabled": self.deep_sleep_enabled,
+            "deep_sleep_interval": self.deep_sleep_interval,
+            "manual_refresh_only": self.manual_refresh_only,
+            "no_refresh_start_hour": self.no_refresh_start_hour,
+            "no_refresh_end_hour": self.no_refresh_end_hour,
             "pages": [p.to_dict() for p in self.pages],
         }
 
@@ -289,6 +308,30 @@ class DeviceConfig:
         sleep_start_hour = int(data.get("sleep_start_hour", 0))
         sleep_end_hour = int(data.get("sleep_end_hour", 5))
 
+        deep_sleep_enabled = bool(data.get("deep_sleep_enabled", False))
+        try:
+            deep_sleep_interval = int(data.get("deep_sleep_interval", 600))
+        except (TypeError, ValueError):
+            deep_sleep_interval = 600
+
+        manual_refresh_only = bool(data.get("manual_refresh_only", False))
+        
+        no_refresh_start_hour_raw = data.get("no_refresh_start_hour")
+        no_refresh_start_hour: Optional[int] = None
+        if no_refresh_start_hour_raw is not None:
+            try:
+                no_refresh_start_hour = int(no_refresh_start_hour_raw)
+            except (TypeError, ValueError):
+                no_refresh_start_hour = None
+
+        no_refresh_end_hour_raw = data.get("no_refresh_end_hour")
+        no_refresh_end_hour: Optional[int] = None
+        if no_refresh_end_hour_raw is not None:
+            try:
+                no_refresh_end_hour = int(no_refresh_end_hour_raw)
+            except (TypeError, ValueError):
+                no_refresh_end_hour = None
+
         try:
             current_page = int(data.get("current_page", 0))
         except (TypeError, ValueError):
@@ -305,6 +348,11 @@ class DeviceConfig:
             sleep_enabled=sleep_enabled,
             sleep_start_hour=sleep_start_hour,
             sleep_end_hour=sleep_end_hour,
+            deep_sleep_enabled=deep_sleep_enabled,
+            deep_sleep_interval=deep_sleep_interval,
+            manual_refresh_only=manual_refresh_only,
+            no_refresh_start_hour=no_refresh_start_hour,
+            no_refresh_end_hour=no_refresh_end_hour,
         )
         cfg.ensure_pages()
         return cfg

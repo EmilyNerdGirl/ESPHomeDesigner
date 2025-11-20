@@ -811,6 +811,10 @@
           <span class="label">Battery icon</span>
           <span class="tag">Entity</span>
         </div>
+        <div class="item" data-widget-type="weather_icon">
+          <span class="label">Weather icon</span>
+          <span class="tag">Icon</span>
+        </div>
         <div class="item" data-widget-type="shape_rect">
           <span class="label">Rectangle / box</span>
           <span class="tag">Shape</span>
@@ -955,41 +959,85 @@
 
   <!-- Device settings modal -->
   <div id="deviceSettingsModal" class="modal-backdrop hidden">
-    <div class="modal" style="max-width: 500px; height: auto;">
+    <div class="modal" style="max-width: 600px; height: auto;">
       <div class="modal-header">
         <div>Device Settings</div>
         <button id="deviceSettingsClose" class="btn btn-secondary">Close</button>
       </div>
       <div class="modal-body">
-        <div class="field">
-          <div class="prop-label">Energy Saving Mode (Night Mode)</div>
-          <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text);margin-bottom:8px;">
-            <input id="deviceSleepEnabled" type="checkbox" style="width:auto;height:auto;margin:0;" />
-            <span>Enable Deep Sleep at night</span>
-          </label>
-          <div style="font-size: 9px; color: var(--muted); margin-bottom: 12px;">
-            When enabled, the device will enter deep sleep during the specified hours to save battery.
-            It will wake up briefly at the top of each hour to refresh the display.
+        <div class="form-group">
+          <label>Device Name</label>
+          <input type="text" id="deviceName" class="prop-input" value="reTerminal" />
+        </div>
+
+        <div class="form-group">
+          <label>Orientation</label>
+          <select id="deviceOrientation" class="prop-input">
+            <option value="landscape">Landscape (800x480)</option>
+            <option value="portrait">Portrait (480x800)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Display Mode</label>
+          <div class="checkbox-row">
+            <input type="checkbox" id="deviceDarkMode">
+            <label for="deviceDarkMode">Dark mode background</label>
           </div>
         </div>
-        <div class="field" style="display:flex;gap:12px;">
-          <div style="flex:1;">
-            <div class="prop-label">Start Hour (0-23)</div>
-            <input id="deviceSleepStart" class="prop-input" type="number" min="0" max="23" placeholder="0" />
+
+        <div class="form-group">
+          <label>Energy Saving / Night Mode</label>
+          <div class="checkbox-row">
+            <input type="checkbox" id="setting-sleep-enabled">
+            <label for="setting-sleep-enabled">Turn off screen at night</label>
           </div>
-          <div style="flex:1;">
-            <div class="prop-label">End Hour (0-23)</div>
-            <input id="deviceSleepEnd" class="prop-input" type="number" min="0" max="23" placeholder="5" />
+          <div class="row" id="sleep-times-row" style="display:none; margin-top:8px;">
+            <div class="col">
+              <label class="sub-label">Start Hour (0-23)</label>
+              <input type="number" id="setting-sleep-start" min="0" max="23" value="0">
+            </div>
+            <div class="col">
+              <label class="sub-label">End Hour (0-23)</label>
+              <input type="number" id="setting-sleep-end" min="0" max="23" value="5">
+            </div>
           </div>
-        </div>
-        <div style="font-size: 9px; color: var(--muted); margin-top: 4px;">
-          Example: Start 0, End 5 means sleep from 00:00 until 05:00.
         </div>
       </div>
-      <div class="modal-actions">
-        <button id="deviceSettingsSave" class="btn">Save</button>
+
+      <div class="form-group" style="border-top: 1px solid var(--border-subtle); padding-top: 12px;">
+        <label>Refresh Strategy</label>
+        <div class="checkbox-row">
+          <input type="checkbox" id="setting-manual-refresh">
+          <label for="setting-manual-refresh">Manual Refresh Only (No Auto-Update)</label>
+        </div>
+        <p class="hint" style="margin-top:4px;">
+          If enabled, the display will only update when you press a physical button or trigger it via Home Assistant.
+        </p>
+      </div>
+
+      <div class="form-group" style="border-top: 1px solid var(--border-subtle); padding-top: 12px;">
+        <label>Battery Saver (Deep Sleep)</label>
+        <div class="checkbox-row">
+          <input type="checkbox" id="setting-deep-sleep-enabled">
+          <label for="setting-deep-sleep-enabled">Enable Deep Sleep</label>
+        </div>
+        <p class="hint" style="margin-top:4px; color: var(--accent);">
+          <strong>Warning:</strong> Device will be offline/unreachable between updates.
+        </p>
+        <div class="row" id="deep-sleep-interval-row" style="display:none; margin-top:8px;">
+          <div class="col">
+            <label class="sub-label">Update Interval (seconds)</label>
+            <input type="number" id="setting-deep-sleep-interval" min="60" value="600">
+            <p class="hint">Recommended: 600s (10 mins) or more.</p>
+          </div>
+        </div>
       </div>
     </div>
+    <div class="modal-actions">
+      <button id="deviceSettingsSave" class="btn">Save</button>
+    </div>
+  </div>
   </div>
 
   <!-- Page settings modal -->
@@ -1266,12 +1314,13 @@
             } else if (p.type === "text" || p.type === "label") {
               widget.props = {
                 text: p.text || "",
-                font_size: parseInt(p.size || p.font_size || 20, 10),
-                font_family: p.font || "Roboto",
-                font_weight: parseInt(p.weight || p.font_weight || 400, 10),
+                font_size: parseInt(p.font_size || p.size || 20, 10),
+                font_family: p.font_family || p.font || "Roboto",
+                font_weight: parseInt(p.font_weight || p.weight || 400, 10),
                 italic: (p.italic === "true" || p.italic === true),
                 bpp: parseInt(p.bpp || 1, 10),
-                color: p.color || "black"
+                color: p.color || "black",
+                text_align: p.align || "TOP_LEFT"
               };
             } else if (p.type === "sensor_text") {
               widget.props = {
@@ -1280,8 +1329,11 @@
                 value_format: p.format || "label_value",
                 color: p.color || "black",
                 font_style: p.font_style || "regular",
+                font_family: p.font_family || "Roboto",
+                font_weight: parseInt(p.font_weight || 400, 10),
                 unit: p.unit || "",
-                precision: parseInt(p.precision || -1, 10)
+                precision: parseInt(p.precision || -1, 10),
+                text_align: p.align || "TOP_LEFT"
               };
             } else if (p.type === "datetime") {
               widget.props = {
@@ -1293,10 +1345,10 @@
               };
             } else if (p.type === "progress_bar") {
               widget.props = {
-                show_label: true,
-                show_percentage: true,
-                bar_height: parseInt(p.bar_height || 15, 10),
-                border_width: parseInt(p.border || 1, 10),
+                show_label: (p.show_label !== "false"),
+                show_percentage: (p.show_pct !== "false"),
+                bar_height: parseInt(p.bar_h || p.bar_height || 15, 10),
+                border_width: parseInt(p.border_w || p.border || 1, 10),
                 color: p.color || "black"
               };
             } else if (p.type === "battery_icon") {
@@ -1304,15 +1356,30 @@
                 size: parseInt(p.size || 32, 10),
                 color: p.color || "black"
               };
+            } else if (p.type === "weather_icon") {
+              widget.props = {
+                size: parseInt(p.size || 48, 10),
+                color: p.color || "black"
+              };
             } else if (p.type === "image") {
               widget.props = {
                 path: p.path || "",
-                invert: (p.invert === "true" || p.invert === "1")
+                invert: (p.invert === "true" || p.invert === "1"),
+                dither: p.dither || "FLOYDSTEINBERG",
+                transparency: p.transparency || "",
+                image_type: p.img_type || "BINARY"
               };
             } else if (p.type === "online_image") {
               widget.props = {
                 url: p.url || "",
-                invert: (p.invert === "true" || p.invert === "1")
+                invert: (p.invert === "true" || p.invert === "1"),
+                interval_s: parseInt(p.interval || 300, 10)
+              };
+            } else if (p.type === "puppet") {
+              widget.props = {
+                image_url: p.url || "",
+                image_type: p.img_type || "RGB565",
+                transparency: p.transparency || "opaque"
               };
             } else if (p.type === "shape_rect") {
               widget.props = {
@@ -1510,6 +1577,7 @@
         ];
       }
       settings = layout.settings || settings || {};
+      deviceName = layout.name || "reTerminal E1001";
       // Ensure defaults for new settings
       if (settings.sleep_enabled === undefined) settings.sleep_enabled = false;
       if (settings.sleep_start_hour === undefined) settings.sleep_start_hour = 0;
@@ -1622,6 +1690,91 @@
     const importSnippetCancel = document.getElementById("importSnippetCancel");
     const importSnippetConfirm = document.getElementById("importSnippetConfirm");
 
+    // --- Device Settings Modal ---
+    const deviceSettingsModal = document.getElementById('deviceSettingsModal');
+    const deviceSettingsClose = document.getElementById('deviceSettingsClose');
+    const deviceSettingsSave = document.getElementById('deviceSettingsSave');
+
+    // Inputs
+    const deviceNameInput = document.getElementById('deviceName');
+    const deviceOrientationInput = document.getElementById('deviceOrientation');
+    const deviceDarkModeInput = document.getElementById('deviceDarkMode');
+
+    const settingSleepEnabled = document.getElementById('setting-sleep-enabled');
+    const settingSleepStart = document.getElementById('setting-sleep-start');
+    const settingSleepEnd = document.getElementById('setting-sleep-end');
+    const sleepTimesRow = document.getElementById('sleep-times-row');
+
+    const settingDeepSleepEnabled = document.getElementById('setting-deep-sleep-enabled');
+    const settingDeepSleepInterval = document.getElementById('setting-deep-sleep-interval');
+    const deepSleepIntervalRow = document.getElementById('deep-sleep-interval-row');
+
+    const settingManualRefresh = document.getElementById('setting-manual-refresh');
+    const settingNoRefreshStart = document.getElementById('setting-no-refresh-start');
+    const settingNoRefreshEnd = document.getElementById('setting-no-refresh-end');
+
+
+    function openDeviceSettings() {
+      deviceNameInput.value = deviceName || "reTerminal E1001";
+      deviceOrientationInput.value = settings.orientation || "landscape";
+      deviceDarkModeInput.checked = !!settings.dark_mode;
+
+      settingSleepEnabled.checked = !!settings.sleep_enabled;
+      settingSleepStart.value = settings.sleep_start_hour ?? 0;
+      settingSleepEnd.value = settings.sleep_end_hour ?? 5;
+      sleepTimesRow.style.display = settingSleepEnabled.checked ? 'flex' : 'none';
+
+      settingDeepSleepEnabled.checked = !!settings.deep_sleep_enabled;
+      settingDeepSleepInterval.value = settings.deep_sleep_interval ?? 600;
+      settingDeepSleepEnabled.checked = !!settings.deep_sleep_enabled;
+      settingDeepSleepInterval.value = settings.deep_sleep_interval ?? 600;
+      deepSleepIntervalRow.style.display = settingDeepSleepEnabled.checked ? 'flex' : 'none';
+
+      settingManualRefresh.checked = !!settings.manual_refresh_only;
+
+      deviceSettingsModal.classList.remove("hidden");
+      deviceSettingsModal.style.display = 'flex';
+    }
+
+    settingSleepEnabled.addEventListener('change', () => {
+      sleepTimesRow.style.display = settingSleepEnabled.checked ? 'flex' : 'none';
+    });
+
+    settingDeepSleepEnabled.addEventListener('change', () => {
+      deepSleepIntervalRow.style.display = settingDeepSleepEnabled.checked ? 'flex' : 'none';
+    });
+
+    const deviceSettingsBtn = document.getElementById('deviceSettingsBtn');
+    if (deviceSettingsBtn) {
+      deviceSettingsBtn.addEventListener('click', openDeviceSettings);
+    }
+
+    deviceSettingsClose.addEventListener('click', () => {
+      deviceSettingsModal.style.display = 'none';
+    });
+
+    deviceSettingsSave.addEventListener('click', async () => {
+      deviceName = deviceNameInput.value.trim();
+      settings.orientation = deviceOrientationInput.value;
+      settings.dark_mode = deviceDarkModeInput.checked;
+
+      settings.sleep_enabled = settingSleepEnabled.checked;
+      settings.sleep_start_hour = parseInt(settingSleepStart.value) || 0;
+      settings.sleep_end_hour = parseInt(settingSleepEnd.value) || 0;
+
+      settings.deep_sleep_enabled = settingDeepSleepEnabled.checked;
+      settings.deep_sleep_interval = parseInt(settingDeepSleepInterval.value) || 600;
+
+      settings.manual_refresh_only = settingManualRefresh.checked;
+
+      applyOrientation(settings.orientation);
+      renderCanvas();
+      scheduleSnippetUpdate();
+
+      deviceSettingsModal.classList.add("hidden");
+      deviceSettingsModal.style.display = 'none';
+    });
+
     if (updateLayoutBtn) {
       updateLayoutBtn.addEventListener("click", async () => {
         const yaml = snippetBox.value || "";
@@ -1699,11 +1852,16 @@
       dark_mode: false,
       sleep_enabled: false,
       sleep_start_hour: 0,
-      sleep_end_hour: 5
+      sleep_enabled: false,
+      sleep_start_hour: 0,
+      sleep_end_hour: 5,
+      manual_refresh_only: false
     };
     let currentPageIndex = 0;
     let widgetsById = new Map();
     let selectedWidgetId = null;
+    let deviceName = "reTerminal E1001";
+    let currentPageSettingsTarget = null;
 
     function initDefaultLayout() {
       pages = [
@@ -1890,8 +2048,16 @@
         widget.width = 60;
         widget.height = 60;
         widget.entity_id = "";
+        widget.props.size = 24;
+        widget.props.color = "black";
+      } else if (type === "weather_icon") {
+        widget.type = "weather_icon";
+        widget.width = 48;
+        widget.height = 48;
+        widget.entity_id = "";
         widget.props.size = 48;
         widget.props.color = "black";
+        widget.props.icon_map = "default"; // or "ha_weather_icon_map"
       } else if (type === "puppet") {
         widget.type = "puppet";
         widget.props.image_url = "";
@@ -1947,6 +2113,7 @@
         widget.props.border = true;
         widget.props.grid = true;
         widget.props.color = "black";
+        widget.props.title = ""; // Graph title
         widget.props.x_grid = "";  // e.g., "10min"
         widget.props.y_grid = "";  // e.g., "1.0"
         widget.props.line_thickness = 3;
@@ -2432,10 +2599,100 @@
           pctLabel.style.marginTop = "2px";
           pctLabel.textContent = Math.round(batteryLevel) + "%";
           el.appendChild(pctLabel);
+        } else if (type === "weather_icon") {
+          const entityId = widget.entity_id || "";
+          const size = parseInt(props.size || 48, 10) || 48;
+          const color = props.color || "black";
+          const colorStyle =
+            color === "white"
+              ? "#ffffff"
+              : color === "gray"
+                ? "#aaaaaa"
+                : "#000000";
+
+          let weatherState = "sunny"; // Default for preview
+          if (hasHaBackend() && entityId) {
+            const state = getEntityState(entityId);
+            if (state !== null && state !== undefined) {
+              weatherState = String(state).toLowerCase();
+            }
+          }
+
+          // Simple mapping for preview, actual mapping is done in ESPHome
+          let iconCode = "F0591"; // Default to weather-sunny
+          switch (weatherState) {
+            case "clear-night":
+              iconCode = "F0594";
+              break;
+            case "cloudy":
+              iconCode = "F0595";
+              break;
+            case "fog":
+              iconCode = "F192C";
+              break;
+            case "hail":
+              iconCode = "F0E6E";
+              break;
+            case "lightning":
+              iconCode = "F0598";
+              break;
+            case "lightning-rainy":
+              iconCode = "F067F";
+              break;
+            case "partlycloudy":
+              iconCode = "F0599";
+              break;
+            case "pouring":
+              iconCode = "F06A1";
+              break;
+            case "rainy":
+              iconCode = "F0596";
+              break;
+            case "snowy":
+              iconCode = "F0590";
+              break;
+            case "snowy-rainy":
+              iconCode = "F0F32";
+              break;
+            case "sunny":
+              iconCode = "F0591";
+              break;
+            case "windy":
+              iconCode = "F0597";
+              break;
+            case "windy-variant":
+              iconCode = "F0F2F";
+              break;
+            case "exceptional":
+              iconCode = "F0024"; // alert-circle
+              break;
+          }
+
+          const cp = 0xf0000 + parseInt(iconCode.slice(1), 16);
+          const ch = String.fromCodePoint(cp);
+
+          el.classList.add("mdi-icon-preview");
+          el.style.fontFamily = "MDI, system-ui, -apple-system, BlinkMacSystemFont, -sans-serif";
+          el.style.lineHeight = "1";
+          el.style.color = colorStyle;
+          el.style.display = "flex";
+          el.style.flexDirection = "column";
+          el.style.alignItems = "center";
+          el.style.justifyContent = "center";
+          el.style.fontSize = size + "px";
+          el.textContent = ch;
+
+          if (!entityId) {
+            const label = document.createElement("div");
+            label.style.fontSize = "10px";
+            label.style.marginTop = "2px";
+            label.textContent = "No Entity";
+            el.appendChild(label);
+          }
         } else if (type === "graph") {
           const entityId = widget.entity_id || "";
           const borderEnabled = props.border !== false;
-          const gridEnabled = props.grid !== false;
+          const gridEnabled = props.grid !== false; // Note: props.grid is not really used, we use x_grid/y_grid presence
           const color = props.color || "black";
           const colorStyle =
             color === "white"
@@ -2460,47 +2717,81 @@
           svg.setAttribute("height", "100%");
           svg.style.display = "block";
 
-          // Add grid if enabled
-          if (gridEnabled) {
-            const gridGroup = document.createElementNS(svgNS, "g");
-            gridGroup.setAttribute("stroke", "#e0e0e0");
-            gridGroup.setAttribute("stroke-width", "1");
+          // Helper to parse duration/time strings to seconds
+          const parseTime = (str) => {
+            if (!str) return 0;
+            const match = str.match(/^(\d+(?:\.\d+)?)\s*(s|min|h|d)?/);
+            if (!match) return 0;
+            const val = parseFloat(match[1]);
+            const unit = match[2] || "s";
+            if (unit === "min") return val * 60;
+            if (unit === "h") return val * 3600;
+            if (unit === "d") return val * 86400;
+            return val;
+          };
 
-            // Vertical grid lines (5 lines)
-            for (let i = 0; i <= 4; i++) {
-              const line = document.createElementNS(svgNS, "line");
-              const x = (i * 25) + "%";
-              line.setAttribute("x1", x);
-              line.setAttribute("y1", "0");
-              line.setAttribute("x2", x);
-              line.setAttribute("y2", "100%");
-              gridGroup.appendChild(line);
-            }
+          // Calculate grid lines
+          const durationSec = parseTime(props.duration || "1h");
+          const xGridSec = parseTime(props.x_grid);
 
-            // Horizontal grid lines (3 lines)
-            for (let i = 0; i <= 2; i++) {
-              const line = document.createElementNS(svgNS, "line");
-              const y = (i * 50) + "%";
-              line.setAttribute("x1", "0");
-              line.setAttribute("y1", y);
-              line.setAttribute("x2", "100%");
-              line.setAttribute("y2", y);
-              gridGroup.appendChild(line);
-            }
-
-            svg.appendChild(gridGroup);
+          let xDivisions = 4; // Default
+          if (durationSec > 0 && xGridSec > 0) {
+            xDivisions = Math.floor(durationSec / xGridSec);
+            // Limit to reasonable number for preview
+            if (xDivisions > 20) xDivisions = 20;
           }
+
+          let yDivisions = 2; // Default
+          const yGridVal = parseFloat(props.y_grid);
+          if (!isNaN(yGridVal) && yGridVal > 0) {
+            // Estimate based on min/max or default range
+            // This is hard to preview accurately without real data range, so we'll just show a few lines
+            // or try to use min/max if set
+            const min = parseFloat(props.min_value) || 0;
+            const max = parseFloat(props.max_value) || 100;
+            if (max > min) {
+              yDivisions = Math.floor((max - min) / yGridVal);
+              if (yDivisions > 10) yDivisions = 10;
+            }
+          }
+
+          const gridGroup = document.createElementNS(svgNS, "g");
+          gridGroup.setAttribute("stroke", "#e0e0e0");
+          gridGroup.setAttribute("stroke-width", "1");
+
+          // Vertical grid lines
+          for (let i = 0; i <= xDivisions; i++) {
+            if (i === 0 && borderEnabled) continue; // Skip first if border exists
+            if (i === xDivisions && borderEnabled) continue; // Skip last
+
+            const line = document.createElementNS(svgNS, "line");
+            const x = (i / xDivisions * 100) + "%";
+            line.setAttribute("x1", x);
+            line.setAttribute("y1", "0");
+            line.setAttribute("x2", x);
+            line.setAttribute("y2", "100%");
+            gridGroup.appendChild(line);
+          }
+
+          // Horizontal grid lines
+          for (let i = 0; i <= yDivisions; i++) {
+            if (i === 0 && borderEnabled) continue;
+            if (i === yDivisions && borderEnabled) continue;
+
+            const line = document.createElementNS(svgNS, "line");
+            const y = (i / yDivisions * 100) + "%";
+            line.setAttribute("x1", "0");
+            line.setAttribute("y1", y);
+            line.setAttribute("x2", "100%");
+            line.setAttribute("y2", y);
+            gridGroup.appendChild(line);
+          }
+          svg.appendChild(gridGroup);
 
           // Generate sample data points for preview
           const sampleData = [
             0.3, 0.5, 0.7, 0.8, 0.65, 0.9, 0.4, 0.2, 0.35, 0.6, 0.75, 0.55
           ];
-
-          const width = widget.width || 200;
-          const height = widget.height || 100;
-          const padding = 4;
-          const graphWidth = width - (padding * 2);
-          const graphHeight = height - (padding * 2);
 
           // Create polyline for the graph
           const polyline = document.createElementNS(svgNS, "polyline");
@@ -2515,14 +2806,36 @@
           polyline.setAttribute("points", points);
           polyline.setAttribute("fill", "none");
           polyline.setAttribute("stroke", colorStyle);
-          polyline.setAttribute("stroke-width", "2");
+          const thickness = parseInt(props.line_thickness || 3, 10);
+          polyline.setAttribute("stroke-width", thickness);
           polyline.setAttribute("stroke-linejoin", "round");
+
+          const lineType = props.line_type || "SOLID";
+          if (lineType === "DASHED") {
+            polyline.setAttribute("stroke-dasharray", "5,5");
+          } else if (lineType === "DOTTED") {
+            polyline.setAttribute("stroke-dasharray", "2,2");
+          }
 
           svg.appendChild(polyline);
           el.appendChild(svg);
 
-          // Add label if no entity selected
-          if (!entityId) {
+          // Add label if no entity selected OR if title is set
+          if (widget.title) {
+            const label = document.createElement("div");
+            label.style.position = "absolute";
+            label.style.top = "2px";
+            label.style.left = "50%";
+            label.style.transform = "translateX(-50%)";
+            label.style.fontSize = "10px";
+            label.style.color = colorStyle;
+            label.style.backgroundColor = "rgba(255,255,255,0.7)";
+            label.style.padding = "0 4px";
+            label.style.borderRadius = "2px";
+            label.style.whiteSpace = "nowrap";
+            label.textContent = widget.title;
+            el.appendChild(label);
+          } else if (!entityId) {
             const label = document.createElement("div");
             label.style.position = "absolute";
             label.style.top = "50%";
@@ -2532,7 +2845,6 @@
             label.style.color = "#999";
             label.style.backgroundColor = "rgba(255,255,255,0.8)";
             label.style.padding = "2px 6px";
-            label.style.borderRadius = "3px";
             label.textContent = "graph (No Entity)";
             el.appendChild(label);
           }
@@ -3399,6 +3711,22 @@
         entityWrap.appendChild(entityRow);
         panel.appendChild(entityWrap);
 
+        const localWrap = document.createElement("div");
+        localWrap.className = "field";
+        const localLbl = document.createElement("div");
+        localLbl.className = "prop-label";
+        localLbl.textContent = "Local / On-Device Sensor";
+        const localCb = document.createElement("input");
+        localCb.type = "checkbox";
+        localCb.checked = !!widget.props.is_local_sensor;
+        localCb.addEventListener("change", () => {
+          widget.props.is_local_sensor = localCb.checked;
+          scheduleSnippetUpdate();
+        });
+        localWrap.appendChild(localLbl);
+        localWrap.appendChild(localCb);
+        panel.appendChild(localWrap);
+
         addLabeledInput("Label (optional)", "text", widget.title || "", (v) => {
           widget.title = v;
           renderCanvas();
@@ -3493,6 +3821,31 @@
         entityWrap.appendChild(entityRow);
         panel.appendChild(entityWrap);
 
+        const localWrap = document.createElement("div");
+        localWrap.className = "field";
+        const localLbl = document.createElement("div");
+        localLbl.className = "prop-label";
+        localLbl.textContent = "Local / On-Device Sensor";
+        const localCb = document.createElement("input");
+        localCb.type = "checkbox";
+        localCb.checked = !!widget.props.is_local_sensor;
+        localCb.addEventListener("change", () => {
+          widget.props.is_local_sensor = localCb.checked;
+          scheduleSnippetUpdate();
+        });
+        localWrap.appendChild(localLbl);
+        localWrap.appendChild(localCb);
+        localWrap.appendChild(localLbl);
+        localWrap.appendChild(localCb);
+        panel.appendChild(localWrap);
+
+        // Label / Title
+        addLabeledInput("Label / Title (optional)", "text", widget.title || "", (v) => {
+          widget.title = v;
+          renderCanvas();
+          scheduleSnippetUpdate();
+        });
+
         // Duration
         addSelect("Duration", widget.props.duration || "1h",
           ["1h", "3h", "6h", "12h", "24h", "2d", "3d", "7d", "14d", "30d"], (val) => {
@@ -3508,15 +3861,105 @@
         gridHeader.textContent = "Grid Settings";
         panel.appendChild(gridHeader);
 
-        addLabeledInput("X Grid (e.g., 10min, 1h)", "text", widget.props.x_grid || "", (v) => {
-          widget.props.x_grid = v;
+        // X Grid with Presets
+        const xGridOptions = ["", "1min", "5min", "10min", "15min", "30min", "1h", "6h", "12h", "24h"];
+        const xGridWrap = document.createElement("div");
+        xGridWrap.className = "field";
+        const xGridLbl = document.createElement("div");
+        xGridLbl.className = "prop-label";
+        xGridLbl.textContent = "X Grid (Time per division)";
+        xGridWrap.appendChild(xGridLbl);
+
+        const xGridRow = document.createElement("div");
+        xGridRow.style.display = "flex";
+        xGridRow.style.gap = "4px";
+
+        const xGridInput = document.createElement("input");
+        xGridInput.className = "prop-input";
+        xGridInput.type = "text";
+        xGridInput.value = widget.props.x_grid || "";
+        xGridInput.placeholder = "e.g. 10min";
+        xGridInput.style.flex = "1";
+        xGridInput.addEventListener("input", () => {
+          widget.props.x_grid = xGridInput.value;
+          renderCanvas(); // Re-render for grid preview
           scheduleSnippetUpdate();
         });
 
-        addLabeledInput("Y Grid (e.g., 1.0, 5.0)", "text", widget.props.y_grid || "", (v) => {
-          widget.props.y_grid = v;
+        const xGridSel = document.createElement("select");
+        xGridSel.className = "prop-input";
+        xGridSel.style.width = "20px"; // Small dropdown arrow
+        xGridSel.title = "Select Preset";
+        xGridOptions.forEach(opt => {
+          const o = document.createElement("option");
+          o.value = opt;
+          o.textContent = opt || "Custom";
+          xGridSel.appendChild(o);
+        });
+        xGridSel.addEventListener("change", () => {
+          if (xGridSel.value) {
+            xGridInput.value = xGridSel.value;
+            widget.props.x_grid = xGridSel.value;
+            renderCanvas();
+            scheduleSnippetUpdate();
+          }
+          xGridSel.value = ""; // Reset so we can select same value again
+        });
+
+        xGridRow.appendChild(xGridInput);
+        xGridRow.appendChild(xGridSel);
+        xGridWrap.appendChild(xGridRow);
+        panel.appendChild(xGridWrap);
+
+        // Y Grid with Presets
+        const yGridOptions = ["", "0.1", "0.5", "1.0", "2.0", "5.0", "10.0", "20.0", "50.0", "100.0"];
+        const yGridWrap = document.createElement("div");
+        yGridWrap.className = "field";
+        const yGridLbl = document.createElement("div");
+        yGridLbl.className = "prop-label";
+        yGridLbl.textContent = "Y Grid (Units per division)";
+        yGridWrap.appendChild(yGridLbl);
+
+        const yGridRow = document.createElement("div");
+        yGridRow.style.display = "flex";
+        yGridRow.style.gap = "4px";
+
+        const yGridInput = document.createElement("input");
+        yGridInput.className = "prop-input";
+        yGridInput.type = "text";
+        yGridInput.value = widget.props.y_grid || "";
+        yGridInput.placeholder = "e.g. 1.0";
+        yGridInput.style.flex = "1";
+        yGridInput.addEventListener("input", () => {
+          widget.props.y_grid = yGridInput.value;
+          renderCanvas(); // Re-render for grid preview
           scheduleSnippetUpdate();
         });
+
+        const yGridSel = document.createElement("select");
+        yGridSel.className = "prop-input";
+        yGridSel.style.width = "20px";
+        yGridSel.title = "Select Preset";
+        yGridOptions.forEach(opt => {
+          const o = document.createElement("option");
+          o.value = opt;
+          o.textContent = opt || "Custom";
+          yGridSel.appendChild(o);
+        });
+        yGridSel.addEventListener("change", () => {
+          if (yGridSel.value) {
+            yGridInput.value = yGridSel.value;
+            widget.props.y_grid = yGridSel.value;
+            renderCanvas();
+            scheduleSnippetUpdate();
+          }
+          yGridSel.value = "";
+        });
+
+        yGridRow.appendChild(yGridInput);
+        yGridRow.appendChild(yGridSel);
+        yGridWrap.appendChild(yGridRow);
+        panel.appendChild(yGridWrap);
 
         // Border toggle
         const borderWrap = document.createElement("div");
@@ -3872,6 +4315,80 @@
         entityWrap.appendChild(entityRow);
         panel.appendChild(entityWrap);
 
+        const localWrap = document.createElement("div");
+        localWrap.className = "field";
+        const localLbl = document.createElement("div");
+        localLbl.className = "prop-label";
+        localLbl.textContent = "Local / On-Device Sensor";
+        const localCb = document.createElement("input");
+        localCb.type = "checkbox";
+        localCb.checked = !!widget.props.is_local_sensor;
+        localCb.addEventListener("change", () => {
+          widget.props.is_local_sensor = localCb.checked;
+          scheduleSnippetUpdate();
+        });
+        localWrap.appendChild(localLbl);
+        localWrap.appendChild(localCb);
+        panel.appendChild(localWrap);
+
+        addLabeledInput("Icon size (px)", "number", widget.props.size || 48, (v) => {
+          let n = parseInt(v || "48", 10);
+          if (Number.isNaN(n) || n < 16) n = 16;
+          if (n > 200) n = 200;
+          widget.props.size = n;
+          renderCanvas();
+          scheduleSnippetUpdate();
+        });
+
+        addSelect("Color", widget.props.color || "black", ["black", "white", "gray"], (val) => {
+          widget.props.color = val;
+          renderCanvas();
+          scheduleSnippetUpdate();
+        });
+      }
+
+      if (type === "weather_icon") {
+        const entityWrap = document.createElement("div");
+        entityWrap.className = "field";
+        const entityLbl = document.createElement("div");
+        entityLbl.className = "prop-label";
+        entityLbl.textContent = "Weather Entity ID";
+
+        const entityRow = document.createElement("div");
+        entityRow.style.display = "flex";
+        entityRow.style.gap = "4px";
+
+        const entityInput = document.createElement("input");
+        entityInput.className = "prop-input";
+        entityInput.type = "text";
+        entityInput.value = widget.entity_id || "";
+        entityInput.style.flex = "1";
+        entityInput.addEventListener("input", () => {
+          widget.entity_id = entityInput.value;
+          if (hasHaBackend() && Object.keys(entityStatesCache).length === 0) {
+            fetchEntityStates();
+          }
+          renderCanvas();
+          scheduleSnippetUpdate();
+        });
+
+        const pickerBtn = document.createElement("button");
+        pickerBtn.className = "btn btn-secondary";
+        pickerBtn.textContent = "⋮⋮⋮";
+        pickerBtn.style.padding = "5px 8px";
+        pickerBtn.style.fontSize = "10px";
+        pickerBtn.type = "button";
+        pickerBtn.title = "Pick from Home Assistant entities";
+        pickerBtn.addEventListener("click", () => {
+          openEntityPickerForWidget(widget, entityInput);
+        });
+
+        entityRow.appendChild(entityInput);
+        entityRow.appendChild(pickerBtn);
+        entityWrap.appendChild(entityLbl);
+        entityWrap.appendChild(entityRow);
+        panel.appendChild(entityWrap);
+
         addLabeledInput("Icon size (px)", "number", widget.props.size || 48, (v) => {
           let n = parseInt(v || "48", 10);
           if (Number.isNaN(n) || n < 16) n = 16;
@@ -3937,6 +4454,22 @@
           entityWrap.appendChild(entityLbl);
           entityWrap.appendChild(entityRow);
           panel.appendChild(entityWrap);
+
+          const localWrap = document.createElement("div");
+          localWrap.className = "field";
+          const localLbl = document.createElement("div");
+          localLbl.className = "prop-label";
+          localLbl.textContent = "Local / On-Device Sensor";
+          const localCb = document.createElement("input");
+          localCb.type = "checkbox";
+          localCb.checked = !!widget.props.is_local_sensor;
+          localCb.addEventListener("change", () => {
+            widget.props.is_local_sensor = localCb.checked;
+            scheduleSnippetUpdate();
+          });
+          localWrap.appendChild(localLbl);
+          localWrap.appendChild(localCb);
+          panel.appendChild(localWrap);
 
           addLabeledInput("Label (leave empty for value only)", "text", widget.title || "", (v) => {
             widget.title = v;
@@ -4170,7 +4703,7 @@
         mdiHint.style.color = "#666";
         mdiHint.style.marginTop = "-8px";
         mdiHint.style.marginBottom = "8px";
-        mdiHint.innerHTML = 'Tip: Use mdi:icon-name for Material Design Icons (auto-downloaded). Browse <a href="https://pictogrammers.com/library/mdi/" target="_blank" style="color: #52c7ea">MDI Library</a>';
+        mdiHint.innerHTML = 'Tip: Use mdi:icon-name for Material Design Icons. <br><b>Important:</b> Ensure `materialdesignicons-webfont.ttf` is in your ESPHome `fonts/` folder. <a href="https://pictogrammers.com/library/mdi/" target="_blank" style="color: #52c7ea">MDI Library</a>';
         panel.appendChild(mdiHint);
 
         addSelect(
@@ -4527,13 +5060,16 @@
     function getPagesPayload() {
       return {
         device_id: "reterminal_e1001",
-        name: "reTerminal E1001",
+        name: deviceName,
         current_page: currentPageIndex,
         orientation: settings.orientation,
         dark_mode: settings.dark_mode,
         sleep_enabled: settings.sleep_enabled,
         sleep_start_hour: settings.sleep_start_hour,
         sleep_end_hour: settings.sleep_end_hour,
+        manual_refresh_only: settings.manual_refresh_only,
+        no_refresh_start_hour: settings.no_refresh_start_hour,
+        no_refresh_end_hour: settings.no_refresh_end_hour,
         pages
       };
     }
@@ -4623,6 +5159,11 @@
             lines.push(`    y_grid: ${p.y_grid.trim()}`);
           }
 
+          // Title / Label
+          if (w.title && w.title.trim()) {
+            lines.push(`    # title: "${w.title.trim()}"`);
+          }
+
           // Line styling
           if (p.line_thickness && p.line_thickness !== 3) {
             lines.push(`    line_thickness: ${p.line_thickness}`);
@@ -4647,6 +5188,11 @@
           if (p.max_range && p.max_range.trim()) {
             lines.push(`    max_range: ${p.max_range.trim()}`);
           }
+
+          // Local sensor marker
+          if (p.is_local_sensor) {
+            lines.push(`    # // local: true`);
+          }
         });
         lines.push("");
       }
@@ -4660,7 +5206,15 @@
       lines.push("display:");
       lines.push("  - platform: waveshare_epaper");
       lines.push("    id: epaper_display");
-      lines.push("    model: 7.50in-bV3");
+      lines.push("    model: 7.50inv2");
+      lines.push("    cs_pin: GPIO10");
+      lines.push("    dc_pin: GPIO11");
+      lines.push("    reset_pin:");
+      lines.push("      number: GPIO12");
+      lines.push("      inverted: false");
+      lines.push("    busy_pin:");
+      lines.push("      number: GPIO13");
+      lines.push("      inverted: true");
       lines.push("    update_interval: 0s");
       lines.push("    lambda: |-");
       lines.push("      int page = id(display_page);");
@@ -4673,6 +5227,13 @@
           for (const w of page.widgets) {
             const t = (w.type || "").toLowerCase();
             const p = w.props || {};
+
+            // Add local sensor marker comment for relevant widgets
+            let localMarker = "";
+            if (p.is_local_sensor) {
+              localMarker = " // local: true";
+            }
+
             if (t === "text" || t === "label") {
               const txt = (p.text || w.title || "Text").replace(/"/g, '\\"');
               if (!txt) continue;
@@ -4710,7 +5271,7 @@
 
               if (entityId) {
                 const safeId = entityId.replace(/\./g, "_").replace(/-/g, "_");
-                lines.push(`        // widget:sensor_text id:${w.id} type:sensor_text x:${w.x} y:${w.y} w:${w.width} h:${w.height} ent:${entityId} title:"${label}" label_font:${labelFontSize} value_font:${valueFontSize} format:${valueFormat} align:${textAlign}`);
+                lines.push(`        // widget:sensor_text id:${w.id} type:sensor_text x:${w.x} y:${w.y} w:${w.width} h:${w.height} ent:${entityId} local:${!!p.is_local_sensor} title:"${label}" label_font:${labelFontSize} value_font:${valueFontSize} format:${valueFormat} align:${textAlign} unit:"${p.unit || ""}" precision:${p.precision || -1} font_style:${p.font_style || "regular"}`);
                 if (valueFormat === "label_newline_value" && label) {
                   lines.push(`        it.printf(${w.x}, ${w.y}, id(font_normal), ${color}, TextAlign::${textAlign}, "${label}");`);
                   const valueY = w.y + labelFontSize + 4;
@@ -4722,7 +5283,7 @@
                 }
               } else {
                 const placeholder = label || "sensor";
-                lines.push(`        // widget:sensor_text id:${w.id} type:sensor_text x:${w.x} y:${w.y} w:${w.width} h:${w.height} title:"${label}" label_font:${labelFontSize} value_font:${valueFontSize} align:${textAlign}`);
+                lines.push(`        // widget:sensor_text id:${w.id} type:sensor_text x:${w.x} y:${w.y} w:${w.width} h:${w.height} title:"${label}" label_font:${labelFontSize} value_font:${valueFontSize} align:${textAlign} unit:"${p.unit || ""}" precision:${p.precision || -1} font_style:${p.font_style || "regular"}`);
                 lines.push(`        // No entity_id configured for this sensor_text widget`);
                 lines.push(`        it.printf(${w.x}, ${w.y}, id(font_normal), ${color}, TextAlign::${textAlign}, "${placeholder}: N/A");`);
               }
@@ -4734,7 +5295,7 @@
               const glyphEsc = `\\\\U000${hex}`;
               const fontRef = p.font_ref === "font_mdi_large" ? "font_mdi_large" : "font_mdi_medium";
               const color = p.color === "white" ? "COLOR_ON" : "COLOR_OFF";
-              lines.push(`        // widget:icon id:${w.id} type:icon x:${w.x} y:${w.y} w:${w.width} h:${w.height} code:${hex} size:${size} color:${p.color || "black"}`);
+              lines.push(`        // widget:icon id:${w.id} type:icon x:${w.x} y:${w.y} w:${w.width} h:${w.height} code:${hex} size:${size} color:${p.color || "black"} fit:${p.fit_icon_to_frame}`);
               lines.push(
                 `        it.printf(${w.x}, ${w.y}, id(${fontRef}), ${color}, "${glyphEsc}");`
               );
@@ -4743,7 +5304,7 @@
               const timeFontSize = parseInt(p.time_font_size || 28, 10) || 28;
               const dateFontSize = parseInt(p.date_font_size || 16, 10) || 16;
               const color = p.color === "white" ? "COLOR_ON" : "COLOR_OFF";
-              lines.push(`        // widget:datetime id:${w.id} type:datetime x:${w.x} y:${w.y} w:${w.width} h:${w.height} format:${format} time_font:${timeFontSize} date_font:${dateFontSize}`);
+              lines.push(`        // widget:datetime id:${w.id} type:datetime x:${w.x} y:${w.y} w:${w.width} h:${w.height} format:${format} time_font:${timeFontSize} date_font:${dateFontSize} color:${p.color || "black"} font_style:${p.font_style || "regular"}`);
               if (format === "time_only") {
                 lines.push(`        it.strftime(${w.x}, ${w.y}, id(font_normal), ${color}, "%H:%M", id(ha_time).now());`);
               } else if (format === "date_only") {
@@ -4761,14 +5322,14 @@
               const color = p.color === "white" ? "COLOR_ON" : "COLOR_OFF";
               if (entityId) {
                 const safeId = entityId.replace(/\./g, "_").replace(/-/g, "_");
-                lines.push(`        // widget:progress_bar id:${w.id} type:progress_bar x:${w.x} y:${w.y} w:${w.width} h:${w.height} entity:${entityId}`);
+                lines.push(`        // widget:progress_bar id:${w.id} type:progress_bar x:${w.x} y:${w.y} w:${w.width} h:${w.height} entity:${entityId} local:${!!p.is_local_sensor} show_label:${p.show_label} show_pct:${p.show_percentage} bar_height:${barHeight} border:${borderWidth} color:${p.color || "black"} title:"${label}"`);
                 lines.push(`        it.rectangle(${w.x}, ${w.y}, ${w.width}, ${barHeight}, ${color});`);
                 lines.push(`        // Fill progress bar based on sensor value`);
                 lines.push(`        { float progress = id(${safeId}).state; if (progress > 0 && progress <= 100) {`);
                 lines.push(`          int fill_w = (int)((${w.width} - 2) * (progress / 100.0));`);
                 lines.push(`          it.filled_rectangle(${w.x}+1, ${w.y}+1, fill_w, ${barHeight}-2, ${color}); }}`);
               } else {
-                lines.push(`        // widget:progress_bar id:${w.id} type:progress_bar x:${w.x} y:${w.y} w:${w.width} h:${w.height} (no entity)`);
+                lines.push(`        // widget:progress_bar id:${w.id} type:progress_bar x:${w.x} y:${w.y} w:${w.width} h:${w.height} show_label:${p.show_label} show_pct:${p.show_percentage} bar_height:${barHeight} border:${borderWidth} color:${p.color || "black"} title:"${label}" (no entity)`);
                 lines.push(`        it.rectangle(${w.x}, ${w.y}, ${w.width}, ${barHeight}, ${color});`);
               }
             } else if (t === "battery_icon") {
@@ -4778,14 +5339,30 @@
               const fontRef = "font_mdi_medium";
               if (entityId) {
                 const safeId = entityId.replace(/\./g, "_").replace(/-/g, "_");
-                lines.push(`        // widget:battery_icon id:${w.id} type:battery_icon x:${w.x} y:${w.y} w:${w.width} h:${w.height} entity:${entityId} size:${size}`);
+                lines.push(`        // widget:battery_icon id:${w.id} type:battery_icon x:${w.x} y:${w.y} w:${w.width} h:${w.height} entity:${entityId} local:${!!p.is_local_sensor} size:${size} color:${p.color || "black"}`);
                 lines.push(`        { float level = id(${safeId}).state;`);
                 lines.push(`          const char* icon = level <= 10 ? "\\\\U000F007A" : level <= 50 ? "\\\\U000F007E" : "\\\\U000F0079";`);
                 lines.push(`          it.printf(${w.x}, ${w.y}, id(${fontRef}), ${color}, "%s", icon);`);
                 lines.push(`          it.printf(${w.x}, ${w.y}+${size}+2, id(font_small), ${color}, "%.0f%%", level); }`);
               } else {
-                lines.push(`        // widget:battery_icon id:${w.id} type:battery_icon x:${w.x} y:${w.y} w:${w.width} h:${w.height} size:${size} (no entity)`);
+                lines.push(`        // widget:battery_icon id:${w.id} type:battery_icon x:${w.x} y:${w.y} w:${w.width} h:${w.height} size:${size} color:${p.color || "black"} (no entity)`);
                 lines.push(`        it.printf(${w.x}, ${w.y}, id(${fontRef}), ${color}, "\\\\U000F0079");  // battery`);
+              }
+            } else if (t === "weather_icon") {
+              const entityId = (w.entity_id || "").trim();
+              const size = parseInt(p.size || 48, 10) || 48;
+              const color = p.color === "white" ? "COLOR_ON" : "COLOR_OFF";
+              const fontRef = p.font_ref === "font_mdi_large" ? "font_mdi_large" : "font_mdi_medium";
+
+              if (entityId) {
+                const safeId = entityId.replace(/\./g, "_").replace(/-/g, "_");
+                lines.push(`        // widget:weather_icon id:${w.id} type:weather_icon x:${w.x} y:${w.y} w:${w.width} h:${w.height} entity:${entityId} size:${size} color:${p.color || "black"}`);
+                // Generate C++ lambda for weather icon (simplified for preview, full logic in backend)
+                lines.push(`        // Weather icon logic will be generated by backend`);
+                lines.push(`        it.printf(${w.x}, ${w.y}, id(${fontRef}), ${color}, "\\\\U000F0591"); // Placeholder sunny`);
+              } else {
+                lines.push(`        // widget:weather_icon id:${w.id} type:weather_icon x:${w.x} y:${w.y} w:${w.width} h:${w.height} size:${size} color:${p.color || "black"} (no entity)`);
+                lines.push(`        it.printf(${w.x}, ${w.y}, id(${fontRef}), ${color}, "\\\\U000F0591"); // Placeholder sunny`);
               }
             } else if (t === "image") {
               const path = (p.path || "").trim();
@@ -4794,14 +5371,14 @@
               if (path) {
                 const safeId = "img_" + path.replace(/[^a-zA-Z0-9]/g, "_");
                 const sizeComment = (w.width && w.height) ? ` (resize: ${w.width}x${w.height})` : "";
-                lines.push(`        // widget:image id:${w.id} type:image x:${w.x} y:${w.y} w:${w.width} h:${w.height} path:"${path}" invert:${invert}${sizeComment}`);
+                lines.push(`        // widget:image id:${w.id} type:image x:${w.x} y:${w.y} w:${w.width} h:${w.height} path:"${path}" invert:${invert} dither:${p.dither || "FLOYDSTEINBERG"} transparency:${p.transparency || ""} img_type:${p.image_type || "BINARY"}${sizeComment}`);
                 if (invert) {
                   lines.push(`        it.image(${w.x}, ${w.y}, id(${safeId}), COLOR_OFF, COLOR_ON);`);
                 } else {
                   lines.push(`        it.image(${w.x}, ${w.y}, id(${safeId}));`);
                 }
               } else {
-                lines.push(`        // widget:image id:${w.id} type:image x:${w.x} y:${w.y} w:${w.width} h:${w.height} (no path)`);
+                lines.push(`        // widget:image id:${w.id} type:image x:${w.x} y:${w.y} w:${w.width} h:${w.height} dither:${p.dither || "FLOYDSTEINBERG"} transparency:${p.transparency || ""} img_type:${p.image_type || "BINARY"} (no path)`);
                 lines.push(`        it.rectangle(${w.x}, ${w.y}, ${w.width}, ${w.height}, ${color});`);
               }
             } else if (t === "puppet") {
@@ -4838,7 +5415,7 @@
               const color = p.color === "white" ? "COLOR_ON" : "COLOR_OFF";
               const safeId = `img_${w.id}`.replace(/-/g, "_");
               const sizeComment = (w.width && w.height) ? ` (resize: ${w.width}x${w.height})` : "";
-              lines.push(`        // widget:online_image id:${w.id} type:online_image x:${w.x} y:${w.y} w:${w.width} h:${w.height} url:"${url}"${sizeComment}`);
+              lines.push(`        // widget:online_image id:${w.id} type:online_image x:${w.x} y:${w.y} w:${w.width} h:${w.height} url:"${url}" invert:${!!p.invert} interval:${p.interval_s || 300}${sizeComment}`);
               if (url) {
                 lines.push(`        it.image(${w.x}, ${w.y}, id(${safeId}));`);
               } else {
@@ -4850,7 +5427,7 @@
               const color = colorProp === "white" ? "COLOR_ON" : "COLOR_OFF";
               const fill = !!p.fill;
               const borderWidth = parseInt(p.border_width || 1, 10) || 1;
-              lines.push(`        // widget:shape_rect id:${w.id} type:shape_rect x:${w.x} y:${w.y} w:${w.width} h:${w.height} fill:${fill} border:${borderWidth} color:${colorProp}`);
+              lines.push(`        // widget:shape_rect id:${w.id} type:shape_rect x:${w.x} y:${w.y} w:${w.width} h:${w.height} fill:${fill} border:${borderWidth} color:${colorProp} opacity:${p.opacity || 100}`);
               if (fill) {
                 if (colorProp === "grey" || colorProp === "gray") {
                   lines.push(`        // Grey fill using 50% checkerboard dithering pattern`);
@@ -4889,7 +5466,7 @@
               const cy = w.y + Math.floor(hSafe / 2);
               const fill = !!p.fill;
               const borderWidth = parseInt(p.border_width || 1, 10) || 1;
-              lines.push(`        // widget:shape_circle id:${w.id} type:shape_circle x:${w.x} y:${w.y} w:${w.width} h:${w.height} fill:${fill} border:${borderWidth} color:${colorProp}`);
+              lines.push(`        // widget:shape_circle id:${w.id} type:shape_circle x:${w.x} y:${w.y} w:${w.width} h:${w.height} fill:${fill} border:${borderWidth} color:${colorProp} opacity:${p.opacity || 100}`);
               if (fill) {
                 if (colorProp === "grey" || colorProp === "gray") {
                   lines.push(`        // Grey fill using 50% checkerboard dithering pattern within circle`);
@@ -4935,7 +5512,7 @@
               const safeId = `graph_${w.id}`.replace(/-/g, "_");
 
               // Generate marker comment for persistence
-              lines.push(`        // widget:graph id:${w.id} type:graph x:${w.x} y:${w.y} w:${w.width} h:${w.height} entity:${entityId} duration:${duration} border:${borderEnabled} color:${color} x_grid:${xGrid} y_grid:${yGrid} line_type:${lineType} line_thickness:${lineThickness} continuous:${continuous} min_value:${minValue} max_value:${maxValue} min_range:${minRange} max_range:${maxRange}`);
+              lines.push(`        // widget:graph id:${w.id} type:graph x:${w.x} y:${w.y} w:${w.width} h:${w.height} title:"${(w.title || "").replace(/"/g, '\\"')}" entity:${entityId} local:${!!p.is_local_sensor} duration:${duration} border:${borderEnabled} color:${color} x_grid:${xGrid} y_grid:${yGrid} line_type:${lineType} line_thickness:${lineThickness} continuous:${continuous} min_value:${minValue} max_value:${maxValue} min_range:${minRange} max_range:${maxRange}`);
 
               if (entityId) {
                 // Add to graph: section:
@@ -4977,6 +5554,9 @@
 
                 // Generate actual graph call
                 lines.push(`        it.graph(${w.x}, ${w.y}, id(${safeId}));`);
+                if (w.title) {
+                  lines.push(`        it.printf(${w.x}+4, ${w.y}+2, id(font_small), ${color === "white" ? "COLOR_ON" : "COLOR_OFF"}, "${w.title.replace(/"/g, '\\"')}");`);
+                }
               } else {
                 // Fallback for no entity
                 const colorStyle = color === "white" ? "COLOR_ON" : "COLOR_OFF";
@@ -5396,6 +5976,18 @@
       currentPageSettingsTarget = null;
     }
 
+    function openPageSettingsModal(page) {
+      currentPageSettingsTarget = page;
+      const modal = document.getElementById("pageSettingsModal");
+      const nameInput = document.getElementById("pageSettingsName");
+      const refreshInput = document.getElementById("pageSettingsRefresh");
+
+      if (nameInput) nameInput.value = page.name || "";
+      if (refreshInput) refreshInput.value = (page.refresh_s !== undefined && page.refresh_s !== null) ? page.refresh_s : "";
+
+      if (modal) modal.classList.remove("hidden");
+    }
+
     function savePageSettings() {
       if (!currentPageSettingsTarget) return;
 
@@ -5433,56 +6025,8 @@
     // ============================================================================
     // Device Settings Modal Functions
     // ============================================================================
-    function openDeviceSettingsModal() {
-      const modal = document.getElementById("deviceSettingsModal");
-      const enabledInput = document.getElementById("deviceSleepEnabled");
-      const startInput = document.getElementById("deviceSleepStart");
-      const endInput = document.getElementById("deviceSleepEnd");
 
-      if (enabledInput) enabledInput.checked = !!settings.sleep_enabled;
-      if (startInput) startInput.value = settings.sleep_start_hour !== undefined ? settings.sleep_start_hour : 0;
-      if (endInput) endInput.value = settings.sleep_end_hour !== undefined ? settings.sleep_end_hour : 5;
 
-      if (modal) modal.classList.remove("hidden");
-    }
-
-    function closeDeviceSettingsModal() {
-      const modal = document.getElementById("deviceSettingsModal");
-      if (modal) modal.classList.add("hidden");
-    }
-
-    function saveDeviceSettings() {
-      const enabledInput = document.getElementById("deviceSleepEnabled");
-      const startInput = document.getElementById("deviceSleepStart");
-      const endInput = document.getElementById("deviceSleepEnd");
-
-      if (enabledInput) settings.sleep_enabled = !!enabledInput.checked;
-
-      if (startInput) {
-        let val = parseInt(startInput.value, 10);
-        if (isNaN(val) || val < 0) val = 0;
-        if (val > 23) val = 23;
-        settings.sleep_start_hour = val;
-      }
-
-      if (endInput) {
-        let val = parseInt(endInput.value, 10);
-        if (isNaN(val) || val < 0) val = 0;
-        if (val > 23) val = 23;
-        settings.sleep_end_hour = val;
-      }
-
-      scheduleSnippetUpdate();
-      closeDeviceSettingsModal();
-    }
-
-    const deviceSettingsBtn = document.getElementById("deviceSettingsBtn");
-    const deviceSettingsClose = document.getElementById("deviceSettingsClose");
-    const deviceSettingsSave = document.getElementById("deviceSettingsSave");
-
-    if (deviceSettingsBtn) deviceSettingsBtn.addEventListener("click", openDeviceSettingsModal);
-    if (deviceSettingsClose) deviceSettingsClose.addEventListener("click", closeDeviceSettingsModal);
-    if (deviceSettingsSave) deviceSettingsSave.addEventListener("click", saveDeviceSettings);
 
     async function loadLayoutFromBackend() {
       console.log("Loading layout from backend...");

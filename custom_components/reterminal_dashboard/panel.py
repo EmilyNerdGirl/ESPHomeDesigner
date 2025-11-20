@@ -998,6 +998,9 @@ class ReTerminalDashboardFontView(HomeAssistantView):
         component_dir = Path(__file__).parent
         config_dir = component_dir.parent.parent
         font_path_www = config_dir / "www" / "reterminal_dashboard_panel" / "materialdesignicons-webfont.ttf"
+
+        # Priority 3: /config/esphome/fonts/ (user custom location)
+        font_path_esphome = config_dir / "esphome" / "fonts" / "materialdesignicons-webfont.ttf"
         
         # Try integration directory first
         if font_path_integration.exists():
@@ -1026,10 +1029,25 @@ class ReTerminalDashboardFontView(HomeAssistantView):
                 )
             except Exception as e:
                 _LOGGER.error("Failed to read font from www: %s", e)
+
+        # Try esphome directory
+        if font_path_esphome.exists():
+            try:
+                font_data = font_path_esphome.read_bytes()
+                _LOGGER.debug("Serving font from esphome: %s (%d bytes)", font_path_esphome, len(font_data))
+                return web.Response(
+                    body=font_data,
+                    status=200,
+                    content_type="font/ttf",
+                    headers={"Cache-Control": "public, max-age=31536000"}
+                )
+            except Exception as e:
+                _LOGGER.error("Failed to read font from esphome: %s", e)
         
         _LOGGER.error("Font file not found at:")
         _LOGGER.error("  1. %s", font_path_integration)
         _LOGGER.error("  2. %s", font_path_www)
+        _LOGGER.error("  3. %s", font_path_esphome)
         return web.Response(
             body=b"Font file not found",
             status=404,

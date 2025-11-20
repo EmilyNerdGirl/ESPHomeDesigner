@@ -79,6 +79,7 @@ class ParsedWidget:
     font_family: str | None = None
     font_size: int | None = None
     font_style: str | None = None
+    font_weight: int | None = None
     # Sensor text properties
     label_font_size: int | None = None
     value_font_size: int | None = None
@@ -99,6 +100,8 @@ class ParsedWidget:
     # Datetime properties
     time_font_size: int | None = None
     date_font_size: int | None = None
+    # Local sensor flag
+    is_local_sensor: bool = False
 
 
 def yaml_to_layout(snippet: str) -> DeviceConfig:
@@ -153,91 +156,66 @@ def yaml_to_layout(snippet: str) -> DeviceConfig:
         current_page=0,
     )
 
-    for page_index, widgets in sorted(pages.items(), key=lambda x: x[0]):
-        page = PageConfig(
-            id=f"page_{page_index}",
-            name=f"Page {page_index + 1}",
-            widgets=[],
-        )
-        for pw in widgets:
-            # Build props based on widget type
+    # Convert parsed pages to PageConfig/WidgetConfig
+    sorted_page_nums = sorted(pages.keys())
+    for page_num in sorted_page_nums:
+        widget_list = pages[page_num]
+        page_widgets: List[WidgetConfig] = []
+        
+        for pw in widget_list:
+            # Map ParsedWidget to WidgetConfig props
             props = {}
             
-            # Common properties from markers
-            if pw.text:
-                props["text"] = pw.text
-            if pw.font_family:
-                props["font_family"] = pw.font_family
-            if pw.font_size is not None:
-                props["font_size"] = pw.font_size
-            if pw.font_style:
-                props["font_style"] = pw.font_style
-            if pw.color:
-                props["color"] = pw.color
-            if pw.opacity is not None:
-                props["opacity"] = pw.opacity
-                
-            # Type-specific properties
-            if pw.type in ("text", "label"):
-                if pw.font_size is None:
-                    props["font_size"] = 16
-                if not pw.color:
-                    props["color"] = "black"
-                    
-            elif pw.code:
-                props["code"] = pw.code
-                props["font_ref"] = "font_mdi_medium"
-                props["fit_icon_to_frame"] = True
-                props["size"] = pw.size or 40
-                if not pw.color:
-                    props["color"] = "black"
-                    
-            elif pw.type == "sensor_text":
-                props["label_font_size"] = pw.label_font_size or 14
-                props["value_font_size"] = pw.value_font_size or 20
-                props["value_format"] = pw.value_format or "label_value"
-                if not pw.color:
-                    props["color"] = "black"
-                    
-            elif pw.type == "datetime":
-                props["format"] = pw.format or "time_date"
-                props["time_font_size"] = pw.time_font_size or 28
-                props["date_font_size"] = pw.date_font_size or 16
-                if not pw.color:
-                    props["color"] = "black"
-                    
-            elif pw.type == "progress_bar":
-                props["bar_height"] = pw.bar_height or 20
-                props["show_percentage"] = pw.show_percentage if pw.show_percentage is not None else True
-                props["show_label"] = pw.show_label if pw.show_label is not None else True
-                if not pw.color:
-                    props["color"] = "black"
-                    
-            elif pw.type == "battery_icon":
-                props["size"] = pw.size or 40
-                if not pw.color:
-                    props["color"] = "black"
-                    
-            elif pw.type in ("shape_rect", "shape_circle"):
-                props["fill"] = pw.fill if pw.fill is not None else False
-                props["border_width"] = pw.border_width if pw.border_width is not None else 1
-                props["opacity"] = pw.opacity if pw.opacity is not None else 100
-                if not pw.color:
-                    props["color"] = "black"
-                    
-            elif pw.type == "line":
-                props["stroke_width"] = pw.stroke_width or 1
-                if not pw.color:
-                    props["color"] = "black"
-                    
-            elif pw.type == "image":
-                props["path"] = pw.path or ""
-                props["invert"] = pw.invert
-                
-            elif pw.type == "online_image":
-                props["url"] = pw.url or ""
-                props["interval_s"] = 300
+            # Text properties
+            if pw.text is not None: props["text"] = pw.text
+            if pw.font_family is not None: props["font_family"] = pw.font_family
+            if pw.font_size is not None: props["font_size"] = pw.font_size
+            if pw.font_weight is not None: props["font_weight"] = pw.font_weight
+            if pw.font_style is not None: props["font_style"] = pw.font_style
             
+            # Sensor properties
+            if pw.label_font_size is not None: props["label_font_size"] = pw.label_font_size
+            if pw.value_font_size is not None: props["value_font_size"] = pw.value_font_size
+            if pw.value_format is not None: props["format"] = pw.value_format
+            if pw.value_format is not None: props["value_format"] = pw.value_format # Ensure both keys work
+            
+            # Common properties
+            if pw.color is not None: props["color"] = pw.color
+            
+            # Shape properties
+            if pw.fill is not None: props["fill"] = pw.fill
+            if pw.opacity is not None: props["opacity"] = pw.opacity
+            if pw.border_width is not None: props["border_width"] = pw.border_width
+            if pw.stroke_width is not None: props["stroke_width"] = pw.stroke_width
+            
+            # Icon/Battery properties
+            if pw.size is not None: props["size"] = pw.size
+            if pw.code is not None: props["code"] = pw.code
+            
+            # Progress bar properties
+            if pw.bar_height is not None: props["bar_height"] = pw.bar_height
+            if pw.show_label is not None: props["show_label"] = pw.show_label
+            if pw.show_percentage is not None: props["show_percentage"] = pw.show_percentage
+            
+            # Datetime properties
+            if pw.time_font_size is not None: props["time_font_size"] = pw.time_font_size
+            if pw.date_font_size is not None: props["date_font_size"] = pw.date_font_size
+            if pw.format is not None: props["format"] = pw.format
+            
+            # Image/Graph properties
+            if pw.path is not None: props["path"] = pw.path
+            if pw.invert is not None: props["invert"] = pw.invert
+            if pw.url is not None: props["url"] = pw.url
+            
+            # Local sensor flag
+            if pw.is_local_sensor: props["is_local_sensor"] = True
+
+            # Handle special cases for text/icon size mapping if needed
+            if pw.type == "text" and "font_size" not in props and "size" in props:
+                props["font_size"] = props["size"]
+            if pw.type == "icon" and "size" not in props and "font_size" in props:
+                props["size"] = props["font_size"]
+
             wc = WidgetConfig(
                 id=pw.id,
                 type=pw.type,
@@ -245,19 +223,19 @@ def yaml_to_layout(snippet: str) -> DeviceConfig:
                 y=pw.y,
                 width=pw.width,
                 height=pw.height,
-                entity_id=pw.entity_id,
                 title=pw.title,
-                icon=None,
-                props=props,
+                entity_id=pw.entity_id,
+                props=props
             )
-            # Log parsed coordinates for debugging
-            _LOGGER.debug(f"Parsed widget {pw.id} type={pw.type} x={pw.x} y={pw.y} w={pw.width} h={pw.height} props={list(props.keys())}")
-            wc.clamp_to_canvas()
-            page.widgets.append(wc)
-        device.pages.append(page)
+            page_widgets.append(wc)
 
-    device.ensure_pages()
-    _LOGGER.info(f"yaml_to_layout: Parsed {len(device.pages)} pages with {sum(len(p.widgets) for p in device.pages)} total widgets")
+        page_conf = PageConfig(
+            id=f"page_{page_num}",
+            name=f"Page {page_num + 1}",
+            widgets=page_widgets
+        )
+        device.pages.append(page_conf)
+
     return device
 
 
@@ -452,6 +430,7 @@ def _parse_widget_line(line: str) -> ParsedWidget | None:
             return val.lower() in ("true", "1", "yes")
         
         font_size = parse_int(meta.get("font_size"))
+        font_weight = parse_int(meta.get("font_weight")) or parse_int(meta.get("weight"))
         label_font_size = parse_int(meta.get("label_font"))
         value_font_size = parse_int(meta.get("value_font"))
         size = parse_int(meta.get("size"))
@@ -465,6 +444,7 @@ def _parse_widget_line(line: str) -> ParsedWidget | None:
         fill = parse_bool(meta.get("fill"))
         show_label = parse_bool(meta.get("show_label"))
         show_percentage = parse_bool(meta.get("show_percentage")) or parse_bool(meta.get("show_pct"))
+        is_local_sensor = parse_bool(meta.get("local"))
 
         return ParsedWidget(
             id=wid,
@@ -484,6 +464,7 @@ def _parse_widget_line(line: str) -> ParsedWidget | None:
             font_family=font_family,
             font_size=font_size,
             font_style=font_style,
+            font_weight=font_weight,
             label_font_size=label_font_size,
             value_font_size=value_font_size,
             value_format=format_val or None,
@@ -498,6 +479,7 @@ def _parse_widget_line(line: str) -> ParsedWidget | None:
             show_percentage=show_percentage,
             time_font_size=time_font_size,
             date_font_size=date_font_size,
+            is_local_sensor=is_local_sensor or False,
         )
 
     # Pattern 2: simple printf (VERY conservative)

@@ -21,7 +21,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, STORAGE_KEY, STORAGE_VERSION
 from .http_api import async_register_http_views
-from .panel import ReTerminalDashboardPanelView
+from .panel import ReTerminalDashboardPanelView, ReTerminalDashboardFontView
 from .services import async_register_services, async_unregister_services
 from .storage import DashboardStorage
 from .models import DashboardState, DeviceConfig, PageConfig, WidgetConfig
@@ -162,6 +162,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register the embedded editor panel backend view
     hass.http.register_view(ReTerminalDashboardPanelView(hass))
     _LOGGER.info("%s: Panel view registered at /reterminal-dashboard", DOMAIN)
+
+    # Register the font view for MDI icons
+    hass.http.register_view(ReTerminalDashboardFontView(hass))
+    _LOGGER.info("%s: Font view registered at /reterminal-dashboard/materialdesignicons-webfont.ttf", DOMAIN)
 
     # Register the sidebar panel
     # Note: This requires 'frontend' to be loaded, which is a dependency of this integration

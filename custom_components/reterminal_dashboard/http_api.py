@@ -426,7 +426,7 @@ class ReTerminalImageProxyView(HomeAssistantView):
         
         # Determine content type
         content_type, _ = mimetypes.guess_type(str(full_path))
-        if not content_type or not content_type.startswith("image/"):
+        if not content_type or (not content_type.startswith("image/") and not content_type.startswith("font/")):
             content_type = "application/octet-stream"
         
         # Read and return the file

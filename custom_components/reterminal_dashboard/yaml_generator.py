@@ -124,10 +124,15 @@ def _generate_deep_sleep(device: DeviceConfig) -> str:
     """
     Generate deep_sleep configuration for power saving.
     """
-    return """deep_sleep:
+    if not device.deep_sleep_enabled:
+        return ""
+
+    # run_duration: 30s gives enough time to connect, fetch time/sensors, and render.
+    # sleep_duration: user configured interval.
+    return f"""deep_sleep:
   id: deep_sleep_1
-  run_duration: 24h
-  sleep_duration: 60min
+  run_duration: 30s
+  sleep_duration: {device.deep_sleep_interval}s
 """
 
 
@@ -162,6 +167,15 @@ def _generate_fonts(device: DeviceConfig) -> str:
                 props = widget.props or {}
                 # Add all battery icon codes
                 for code in ["F0079", "F007A", "F007B", "F007C", "F007D", "F007E", "F007F", "F0080", "F0081", "F0082"]:
+                    icon_codes.add(code)
+                # Collect icon size if specified
+                size = int(props.get("size", 48) or 48)
+                icon_sizes.add(size)
+            elif wtype == "weather_icon":
+                # Weather icons need all weather state glyphs
+                props = widget.props or {}
+                # Add all weather icon codes
+                for code in ["F0591", "F0594", "F0595", "F192C", "F0E6E", "F0598", "F067F", "F0599", "F06A1", "F0596", "F0590", "F0F32", "F0597", "F0F2F", "F0024"]:
                     icon_codes.add(code)
                 # Collect icon size if specified
                 size = int(props.get("size", 48) or 48)
@@ -232,6 +246,10 @@ def _generate_fonts(device: DeviceConfig) -> str:
     # Base fonts - use selected font family for all standard sizes
     font_lines = [
         "font:",
+        f"  - file: \"gfonts://{selected_font_family}@400\"",
+        "    id: font_axis",
+        "    size: 10",
+        "",
         f"  - file: \"gfonts://{selected_font_family}@400\"",
         "    id: font_small",
         "    size: 19",
@@ -327,11 +345,14 @@ def _generate_text_sensors(device: DeviceConfig) -> str:
     """
     Generate text_sensor and sensor blocks for HomeAssistant entities.
     - text_sensor: for sensor_text widgets (string values)
-    - sensor: for progress_bar, battery_icon (numeric values)
+    - sensor: for progress_bar, battery_icon, graph, and sensor_text with precision (numeric values)
+    
+    NOTE: To avoid "Duplicate key" errors, we output these as commented instructions
+    or a list of items that the user must paste into their existing config.
     """
     # Collect entity_ids by type
     text_entity_ids = set()
-    numeric_entity_ids = set()
+    numeric_entity_ids = {}  # Map entity_id -> max precision found (-1 = default)
     
     for page in device.pages:
         for widget in page.widgets:
@@ -340,53 +361,88 @@ def _generate_text_sensors(device: DeviceConfig) -> str:
                 continue
             
             wtype = (widget.type or "").lower()
+            props = widget.props or {}
+            
+            # Check if marked as local sensor
+            if props.get("is_local_sensor"):
+                continue
+            
             # Widgets that need numeric (float) values
-            if wtype in ("progress_bar", "battery_icon"):
-                numeric_entity_ids.add(entity_id)
-            # Widgets that can use text values
+            if wtype in ("progress_bar", "battery_icon", "graph"):
+                if entity_id not in numeric_entity_ids:
+                    numeric_entity_ids[entity_id] = -1
+            # Weather icon needs text state
+            elif wtype == "weather_icon":
+                if entity_id not in numeric_entity_ids:
+                    text_entity_ids.add(entity_id)
+            # sensor_text can be numeric if precision is specified
+            elif wtype == "sensor_text":
+                precision = int(props.get("precision", -1))
+                if precision >= 0:
+                    # It's numeric
+                    current = numeric_entity_ids.get(entity_id, -2)
+                    # Update precision if this widget needs higher (or specific) precision
+                    # For simplicity, if multiple widgets use same sensor with diff precision,
+                    # we pick the one specified (or max). ESPHome sensor only has one accuracy_decimals.
+                    # Let's just use the last one or max.
+                    numeric_entity_ids[entity_id] = max(current, precision)
+                else:
+                    # It's text (or we treat it as text if no precision specified)
+                    # But if it was already marked numeric by another widget, keep it numeric?
+                    # If a sensor is used as both text and numeric, it must be a sensor (numeric) 
+                    # because text_sensor can't easily be graphed.
+                    # But if it's a string state, sensor will fail.
+                    # We assume if it's used in a graph/bar, it's numeric.
+                    if entity_id not in numeric_entity_ids:
+                        text_entity_ids.add(entity_id)
+            # Other widgets
             else:
-                text_entity_ids.add(entity_id)
+                if entity_id not in numeric_entity_ids:
+                    text_entity_ids.add(entity_id)
     
+    # Remove entities from text_set if they are in numeric_set (numeric takes precedence)
+    for eid in list(text_entity_ids):
+        if eid in numeric_entity_ids:
+            text_entity_ids.remove(eid)
+            
     sections = []
     
     # Generate text_sensor section for text-based widgets
     if text_entity_ids:
-        text_entries = []
+        sections.append("text_sensor:")
         for entity_id in sorted(text_entity_ids):
             # Skip local IDs (no dot) - assume they are defined elsewhere
             if "." not in entity_id:
                 continue
             safe_id = entity_id.replace(".", "_").replace("-", "_")
-            text_entries.append(f"""  - platform: homeassistant
+            sections.append(f"""  - platform: homeassistant
     id: {safe_id}
     entity_id: {entity_id}
     internal: true""")
-        
-        if text_entries:
-            sections.append(f"""text_sensor:
-{chr(10).join(text_entries)}""")
+        sections.append("")
     
     # Generate sensor section for numeric widgets
     if numeric_entity_ids:
-        numeric_entries = []
-        for entity_id in sorted(numeric_entity_ids):
-            # Skip local IDs (no dot) - assume they are defined elsewhere
+        sections.append("sensor:")
+        for entity_id in sorted(numeric_entity_ids.keys()):
+            # Skip local IDs (no dot)
             if "." not in entity_id:
                 continue
             safe_id = entity_id.replace(".", "_").replace("-", "_")
-            numeric_entries.append(f"""  - platform: homeassistant
+            precision = numeric_entity_ids[entity_id]
+            
+            sections.append(f"""  - platform: homeassistant
     id: {safe_id}
     entity_id: {entity_id}
     internal: true""")
-        
-        if numeric_entries:
-            sections.append(f"""sensor:
-{chr(10).join(numeric_entries)}""")
+            if precision >= 0:
+                sections.append(f"    accuracy_decimals: {precision}")
+        sections.append("")
     
     if not sections:
         return "# No widgets with entities configured"
     
-    return "\n\n".join(sections) + "\n"
+    return "\n".join(sections) + "\n"
 
 
 def _generate_navigation_buttons(device: DeviceConfig) -> str:
@@ -467,6 +523,14 @@ def _generate_scripts(device: DeviceConfig) -> str:
     - Enforce a minimum of 60 seconds for any effective interval.
     - Night mode: Deep sleep between start_hour and end_hour, waking only at top of hour.
     """
+    if device.manual_refresh_only:
+        return """script:
+  - id: manage_run_and_sleep
+    mode: restart
+    then:
+      - logger.log: "Manual refresh only mode. Auto-refresh loop disabled."
+"""
+
     case_lines: List[str] = []
     for idx, page in enumerate(device.pages):
         refresh = getattr(page, "refresh_s", None)
@@ -540,6 +604,35 @@ def _generate_scripts(device: DeviceConfig) -> str:
             - delay: 1s
           else:"""
 
+    # No Refresh Logic
+    no_refresh_logic = ""
+    nr_start = getattr(device, "no_refresh_start_hour", None)
+    nr_end = getattr(device, "no_refresh_end_hour", None)
+    
+    if nr_start is not None and nr_end is not None:
+        try:
+            s_h = int(nr_start)
+            e_h = int(nr_end)
+            if s_h > e_h:
+                cond = f"(now.hour >= {s_h} || now.hour < {e_h})"
+            else:
+                cond = f"(now.hour >= {s_h} && now.hour < {e_h})"
+            
+            no_refresh_logic = f"""
+            - if:
+                condition:
+                  lambda: |-
+                    auto now = id(ha_time).now();
+                    return now.is_valid() && {cond};
+                then:
+                  - logger.log: "In no-refresh window. Skipping display update."
+                  - delay: 60s
+                  - script.execute: manage_run_and_sleep
+                  - script.stop: manage_run_and_sleep
+            """
+        except (ValueError, TypeError):
+            pass
+
     return f"""script:
   - id: manage_run_and_sleep
     mode: restart
@@ -561,6 +654,7 @@ def _generate_scripts(device: DeviceConfig) -> str:
                 id(page_refresh_current_s) = interval;
                 ESP_LOGI("refresh", "Next refresh in %d seconds for page %d", interval, page);
             
+            {no_refresh_logic}
             - component.update: epaper_display
             - delay: !lambda 'return id(page_refresh_current_s) * 1000;'
             - script.execute: manage_run_and_sleep
@@ -624,7 +718,9 @@ def _generate_graphs(device: DeviceConfig) -> str:
             
         # Traces (currently only one supported by editor UI)
         lines.append("    traces:")
-        lines.append(f"      - sensor: {entity_id}")
+        # Sanitize sensor ID for the trace
+        safe_sensor_id = entity_id.replace(".", "_").replace("-", "_")
+        lines.append(f"      - sensor: {safe_sensor_id}")
         
         # Trace styling
         if props.get("line_type"):
@@ -886,7 +982,7 @@ def _append_widget_render(dst: List[str], indent: str, widget: WidgetConfig) -> 
         font_style = props.get("font_style") or "regular"
         font_weight = int(props.get("font_weight", 400) or 400)
         # Add marker comment for parser with all properties including font_family and font_weight
-        content.append(f'{indent}// widget:text id:{widget.id} type:text x:{x} y:{y} w:{w} h:{h} text:"{text}" font_size:{font_size} font_family:{font_family} font_weight:{font_weight} color:{color_prop} font_style:{font_style}')
+        content.append(f'{indent}// widget:text id:{widget.id} type:text x:{x} y:{y} w:{w} h:{h} text:"{text}" font_size:{font_size} font_family:{font_family} font_weight:{font_weight} weight:{font_weight} color:{color_prop} font_style:{font_style}')
         content.append(f'{indent}it.print({x}, {y}, {font}, {fg}, "{text}");')
         _wrap_with_condition(dst, indent, widget, content)
         return
@@ -948,15 +1044,18 @@ def _append_widget_render(dst: List[str], indent: str, widget: WidgetConfig) -> 
                 safe_id = entity_id
             
             # Add marker comment for parser with font sizes and font_family
-            content.append(f'{indent}// widget:sensor_text id:{widget.id} type:sensor_text x:{x} y:{y} w:{w} h:{h} ent:{entity_id} title:"{label}" label_font:{label_font_size} value_font:{value_font_size} format:{value_format} font_family:{font_family} font_weight:{font_weight} precision:{precision}')
+            is_local = "true" if props.get("is_local_sensor") else "false"
+            content.append(f'{indent}// widget:sensor_text id:{widget.id} type:sensor_text x:{x} y:{y} w:{w} h:{h} ent:{entity_id} title:"{label}" label_font:{label_font_size} value_font:{value_font_size} format:{value_format} font_family:{font_family} font_weight:{font_weight} precision:{precision} local:{is_local}')
             
             # Determine value expression and format string
             if precision >= 0:
+                unit = props.get("unit", "")
                 val_expr = f"atof(id({safe_id}).state.c_str())"
-                fmt_spec = f"%.{precision}f"
+                fmt_spec = f"%.{precision}f{unit}"
             else:
+                unit = props.get("unit", "")
                 val_expr = f"id({safe_id}).state.c_str()"
-                fmt_spec = "%s"
+                fmt_spec = f"%s{unit}"
 
             if value_format == "label_newline_value" and label:
                 # Label on one line, value on another - use separate fonts
@@ -998,8 +1097,11 @@ def _append_widget_render(dst: List[str], indent: str, widget: WidgetConfig) -> 
         # Calculate center X for alignment
         cx = x + w // 2
         
+        # Extract font_family for marker (even though datetime currently doesn't use it for rendering)
+        font_family = props.get("font_family") or "Inter"
+        
         # Add marker comment for parser
-        content.append(f'{indent}// widget:datetime id:{widget.id} type:datetime x:{x} y:{y} w:{w} h:{h} format:{format_type} time_font:{time_font_size} date_font:{date_font_size}')
+        content.append(f'{indent}// widget:datetime id:{widget.id} type:datetime x:{x} y:{y} w:{w} h:{h} format:{format_type} time_font:{time_font_size} date_font:{date_font_size} color:{base_color} font_family:{font_family}')
         
         if format_type == "time_only":
             # Time only - centered
@@ -1046,7 +1148,8 @@ def _append_widget_render(dst: List[str], indent: str, widget: WidgetConfig) -> 
         # ============================================================================
         show_label_str = "true" if show_label else "false"
         show_pct_str = "true" if show_percentage else "false"
-        content.append(f'{indent}// widget:progress_bar id:{widget.id} type:progress_bar x:{x} y:{y} w:{w} h:{h} entity:{entity_id} label:"{label}" bar_height:{bar_height} border:{border_width} show_label:{show_label_str} show_pct:{show_pct_str} color:{base_color}')
+        is_local = "true" if props.get("is_local_sensor") else "false"
+        content.append(f'{indent}// widget:progress_bar id:{widget.id} type:progress_bar x:{x} y:{y} w:{w} h:{h} ent:{entity_id} title:"{label}" show_label:{show_label} show_pct:{show_pct} bar_h:{bar_height} border_w:{border_width} color:{base_color} local:{is_local}')
         
         # Calculate vertical layout
         label_y = y
@@ -1114,7 +1217,8 @@ def _append_widget_render(dst: List[str], indent: str, widget: WidgetConfig) -> 
         # DO NOT CHANGE: Parser depends on exact format: x:{x} y:{y} w:{w} h:{h}
         # These coordinates must be preserved for round-trip editing to work
         # ============================================================================
-        content.append(f'{indent}// widget:battery_icon id:{widget.id} type:battery_icon x:{x} y:{y} w:{w} h:{h} entity:{entity_id} size:{size} color:{base_color}')
+        is_local = "true" if props.get("is_local_sensor") else "false"
+        content.append(f'{indent}// widget:battery_icon id:{widget.id} type:battery_icon x:{x} y:{y} w:{w} h:{h} ent:{entity_id} size:{size} color:{base_color} local:{is_local}')
         
         # Add logic to pick battery icon based on level
         content.append(f'{indent}{{')
@@ -1133,6 +1237,49 @@ def _append_widget_render(dst: List[str], indent: str, widget: WidgetConfig) -> 
         content.append(f'{indent}  it.printf({x}, {y}, id({font_id}), {fg}, "%s", icon);')
         content.append(f'{indent}  // Show percentage below icon')
         content.append(f'{indent}  it.printf({x}, {y}+{size}+2, id(font_small), {fg}, "%.0f%%", level);')
+        content.append(f'{indent}}}')
+        _wrap_with_condition(dst, indent, widget, content)
+        return
+
+    # Weather icon widget - dynamic icon based on weather state
+    if wtype == "weather_icon":
+        entity_id = (widget.entity_id or "").strip()
+        size = int(props.get("size", 48) or 48)
+        font_id = f"font_mdi_{size}"
+        
+        if not entity_id:
+            content.append(f'{indent}// widget:weather_icon id:{widget.id} type:weather_icon x:{x} y:{y} w:{w} h:{h} size:{size} color:{base_color} (no entity)')
+            content.append(f'{indent}it.printf({x}, {y}, id({font_id}), {fg}, "\\U000F0591"); // sunny placeholder')
+            _wrap_with_condition(dst, indent, widget, content)
+            return
+
+        if "." in entity_id:
+            safe_id = entity_id.replace(".", "_").replace("-", "_")
+        else:
+            safe_id = entity_id
+            
+        content.append(f'{indent}// widget:weather_icon id:{widget.id} type:weather_icon x:{x} y:{y} w:{w} h:{h} ent:{entity_id} size:{size} color:{base_color}')
+        
+        # Generate C++ lambda to map weather state to icon
+        content.append(f'{indent}{{')
+        content.append(f'{indent}  std::string state = id({safe_id}).state;')
+        content.append(f'{indent}  const char* icon = "\\U000F0591"; // default sunny')
+        content.append(f'{indent}  if (state == "clear-night") icon = "\\U000F0594";')
+        content.append(f'{indent}  else if (state == "cloudy") icon = "\\U000F0595";')
+        content.append(f'{indent}  else if (state == "fog") icon = "\\U000F192C";')
+        content.append(f'{indent}  else if (state == "hail") icon = "\\U000F0E6E";')
+        content.append(f'{indent}  else if (state == "lightning") icon = "\\U000F0598";')
+        content.append(f'{indent}  else if (state == "lightning-rainy") icon = "\\U000F067F";')
+        content.append(f'{indent}  else if (state == "partlycloudy") icon = "\\U000F0599";')
+        content.append(f'{indent}  else if (state == "pouring") icon = "\\U000F06A1";')
+        content.append(f'{indent}  else if (state == "rainy") icon = "\\U000F0596";')
+        content.append(f'{indent}  else if (state == "snowy") icon = "\\U000F0590";')
+        content.append(f'{indent}  else if (state == "snowy-rainy") icon = "\\U000F0F32";')
+        content.append(f'{indent}  else if (state == "sunny") icon = "\\U000F0591";')
+        content.append(f'{indent}  else if (state == "windy") icon = "\\U000F0597";')
+        content.append(f'{indent}  else if (state == "windy-variant") icon = "\\U000F0F2F";')
+        content.append(f'{indent}  else if (state == "exceptional") icon = "\\U000F0024";')
+        content.append(f'{indent}  it.printf({x}, {y}, id({font_id}), {fg}, "%s", icon);')
         content.append(f'{indent}}}')
         _wrap_with_condition(dst, indent, widget, content)
         return
@@ -1158,6 +1305,23 @@ def _append_widget_render(dst: List[str], indent: str, widget: WidgetConfig) -> 
                 content.append(f"{indent}  for (int dx = 0; dx < {w}; dx++) {{")
                 content.append(f"{indent}    if ((dx + dy) % 2 == 0) {{")
                 content.append(f"{indent}      it.draw_pixel_at({x}+dx, {y}+dy, COLOR_ON);")
+                content.append(f"{indent}    }}")
+                content.append(f"{indent}  }}")
+                content.append(f"{indent}}}")
+            elif opacity < 100:
+                # Opacity simulation using dithering
+                # Simple dithering: skip pixels based on opacity
+                # 75% opacity = draw 3/4 pixels
+                # 50% opacity = draw 1/2 pixels (checkerboard)
+                # 25% opacity = draw 1/4 pixels
+                content.append(f"{indent}// Opacity {opacity}% simulation")
+                content.append(f"{indent}for (int dy = 0; dy < {h}; dy++) {{")
+                content.append(f"{indent}  for (int dx = 0; dx < {w}; dx++) {{")
+                threshold = int(opacity * 2.55) # Map 0-100 to 0-255
+                # Use a simple pseudo-random or pattern based check
+                # (dx*3 + dy*7) % 100 < opacity
+                content.append(f"{indent}    if (((dx*3 + dy*7) % 100) < {opacity}) {{")
+                content.append(f"{indent}      it.draw_pixel_at({x}+dx, {y}+dy, {fg});")
                 content.append(f"{indent}    }}")
                 content.append(f"{indent}  }}")
                 content.append(f"{indent}}}")
@@ -1208,6 +1372,19 @@ def _append_widget_render(dst: List[str], indent: str, widget: WidgetConfig) -> 
                 content.append(f"{indent}      }}")
                 content.append(f"{indent}    }}")
                 content.append(f"{indent}  }}")
+                content.append(f"{indent}  }}")
+                content.append(f"{indent}}}")
+            elif opacity < 100:
+                # Opacity simulation for circle
+                content.append(f"{indent}// Opacity {opacity}% simulation")
+                content.append(f"{indent}for (int dy = -{r}; dy <= {r}; dy++) {{")
+                content.append(f"{indent}  for (int dx = -{r}; dx <= {r}; dx++) {{")
+                content.append(f"{indent}    if (dx*dx + dy*dy <= {r}*{r}) {{")
+                content.append(f"{indent}      if (((dx*3 + dy*7) % 100) < {opacity}) {{")
+                content.append(f"{indent}        it.draw_pixel_at({cx}+dx, {cy}+dy, {fg});")
+                content.append(f"{indent}      }}")
+                content.append(f"{indent}    }}")
+                content.append(f"{indent}  }}")
                 content.append(f"{indent}}}")
             else:
                 # Solid fill (black or white)
@@ -1241,52 +1418,58 @@ def _append_widget_render(dst: List[str], indent: str, widget: WidgetConfig) -> 
         entity_id = (widget.entity_id or "").strip()
         duration = props.get("duration", "1h")
         border = bool(props.get("border", True))
-        grid = bool(props.get("grid", True)) # Not used in lambda but good to track
         color_prop = (props.get("color") or "black").lower()
+        title = (widget.title or "").replace('"', '\\"')
         
         # Additional graph props for persistence
         x_grid = props.get("x_grid", "")
         y_grid = props.get("y_grid", "")
         line_type = props.get("line_type", "")
         line_thickness = props.get("line_thickness", "")
+        min_value = props.get("min_value", "")
+        max_value = props.get("max_value", "")
+        min_range = props.get("min_range", "")
+        max_range = props.get("max_range", "")
+        continuous = "true" if props.get("continuous") else "false"
+        is_local = "true" if props.get("is_local_sensor") else "false"
         
+        safe_id = f"graph_{widget.id}".replace("-", "_")
+
         if not entity_id:
-            content.append(f'{indent}// widget:graph id:{widget.id} type:graph x:{x} y:{y} w:{w} h:{h} duration:"{duration}" border:{border} color:{color_prop} (no entity)')
+            content.append(f'{indent}// widget:graph id:{widget.id} type:graph x:{x} y:{y} w:{w} h:{h} duration:"{duration}" border:{border} color:{color_prop} title:"{title}" (no entity)')
             content.append(f'{indent}it.rectangle({x}, {y}, {w}, {h}, {fg});')
             content.append(f'{indent}it.line({x}, {y}+{h}, {x}+{w}, {y}, {fg});')
+            content.append(f'{indent}it.printf({x}+5, {y}+5, id(font_small), {fg}, "Graph (no entity)");')
         else:
-            # Generate safe ID for the graph component defined in _generate_graphs
-            safe_graph_id = f"graph_{widget.id}".replace("-", "_")
+            content.append(f'{indent}// widget:graph id:{widget.id} type:graph x:{x} y:{y} w:{w} h:{h} entity:{entity_id} duration:"{duration}" border:{border} color:{color_prop} x_grid:{x_grid} y_grid:{y_grid} line_type:{line_type} line_thickness:{line_thickness} min_value:{min_value} max_value:{max_value} min_range:{min_range} max_range:{max_range} continuous:{continuous} local:{is_local} title:"{title}"')
+            content.append(f'{indent}it.graph({x}, {y}, id({safe_id}));')
             
-            # Add marker comment for parser
-            # Must include all properties to persist them
-            content.append(f'{indent}// widget:graph id:{widget.id} type:graph x:{x} y:{y} w:{w} h:{h} entity:{entity_id} duration:"{duration}" border:{border} x_grid:"{x_grid}" y_grid:"{y_grid}" line_type:"{line_type}" line_thickness:"{line_thickness}" color:{color_prop}')
-            
-            # Draw the graph using the component ID
-            # The graph component handles the border drawing if configured
-            content.append(f'{indent}it.graph({x}, {y}, id({safe_graph_id}));')
-            
+            # Render title if present
+            if title:
+                # Draw title in top-left corner with small font
+                content.append(f'{indent}it.printf({x}+4, {y}+2, id(font_small), {fg}, "{title}");')
+
         _wrap_with_condition(dst, indent, widget, content)
         return
 
     # Image widget
     if wtype == "image":
-        path = props.get("path", "").strip()
+        path = (props.get("path") or "").strip()
+        invert = bool(props.get("invert"))
+        
         if path:
             # Generate safe ID from path (same logic as in _generate_fonts)
             safe_path = path.replace("/", "_").replace(".", "_").replace("-", "_").replace(" ", "_")
+            # IMPORTANT: Include dimensions in ID to match the definition in _generate_fonts
             safe_id = f"img_{safe_path}_{w}x{h}"
-            
-            # Check if image should be inverted
-            invert = bool(props.get("invert"))
             
             # Add marker comment for parser
             content.append(f'{indent}// widget:image id:{widget.id} type:image x:{x} y:{y} w:{w} h:{h} path:"{path}" invert:{invert}')
             
             if invert:
-                content.append(f'{indent}it.image({x}, {y}, id({safe_id}), COLOR_OFF, COLOR_ON);')
+                content.append(f"{indent}it.image({x}, {y}, id({safe_id}), COLOR_OFF, COLOR_ON);")
             else:
-                content.append(f'{indent}it.image({x}, {y}, id({safe_id}));')
+                content.append(f"{indent}it.image({x}, {y}, id({safe_id}));")
         else:
             content.append(f'{indent}// widget:image id:{widget.id} type:image x:{x} y:{y} w:{w} h:{h} (no path)')
             content.append(f'{indent}it.rectangle({x}, {y}, {w}, {h}, {fg});')
