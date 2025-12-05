@@ -17,7 +17,7 @@
 
 **No more hand-coding ESPHome display lambdas! 🎉**
 
-Got a Seeed Studio reTerminal E1001 and frustrated with manually writing display code? Yeah, me too. So I built a drag-and-drop editor that runs right inside Home Assistant.
+Got an E-Ink Display with an ESP chip and frustrated with manually writing display code? Yeah, me too. So I built a drag-and-drop editor that runs right inside Home Assistant.
 
 Design your e-ink dashboard visually, click generate, flash it - done. No YAML wrestling required (unless you're into that).
 
