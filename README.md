@@ -16,7 +16,7 @@
 
 **No more hand-coding ESPHome display lambdas! 🎉**
 
-Building a custom smart display for Home Assistant? Frustrated with manually writing YAML and guessing coordinates?
+Building a custom smart display for Home Assistant? Frustrated with manually writing C++ lambdas and guessing coordinates?
 
 **Meet your new HMI Designer.**
 
@@ -150,6 +150,33 @@ We expose everything (buttons, sensors, battery) back to Home Assistant. Does a 
 - **Weather Forecast** - Multi-day weather forecast display
   - Shows upcoming weather conditions with icons
   - Integrates with Home Assistant weather entities
+
+## LVGL Support (Beta / Hybrid Mode)
+
+**⚠️ Experimental Feature**
+
+This tool includes experimental support for **LVGL (Light and Versatile Graphics Library)**, allowing for more advanced widgets (like Arcs, Charts, and interactive Buttons) on capable devices.
+
+### How it works (Hybrid Mode)
+
+The editor operates in two modes:
+
+1.  **Native Mode (Default)**: If you only use standard widgets (Text, Icon, Graph, lines...), it generates standard ESPHome display lambdas. This is the most stable and memory-efficient mode.
+
+2.  **LVGL Hybrid Mode**: If you add **ANY** LVGL-specific widget to your page (e.g., `LVGL Button`, `LVGL Arc`, `LVGL Slider`), the **entire page** switches to LVGL mode.
+
+### Important Behavior in LVGL Mode
+
+When a page switches to LVGL mode:
+*   **Auto-Translation**: The editor will automatically attempt to convert your existing "Native" widgets into their LVGL equivalents.
+    *   `Graph` -> `lvgl_chart`
+    *   `Image` / `Online Image` -> `lvgl_img`
+    *   `Progress Bar` -> `lvgl_bar`
+    *   `QR Code` -> `lvgl_qrcode`
+    *   `Text` / `Label` -> `lvgl_label`
+    *   `Rectangles` / `Lines` -> `lvgl_obj` / `lvgl_line`
+*   **Visibility Warning**: Any widget type that **does not** have an LVGL translation implemented yet will become **invisible** on the device, even if it shows up in the editor.
+*   **Memory Usage**: LVGL requires significantly more RAM than native mode. Ensure your device (like ESP32-S3) has PSRAM enabled.
 
 ## Features
 
