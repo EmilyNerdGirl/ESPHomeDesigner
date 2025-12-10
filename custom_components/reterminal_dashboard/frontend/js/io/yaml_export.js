@@ -1235,8 +1235,14 @@ function generateSnippetLocally() {
 
     // Generate external_components section (Critical for PhotoPainter AXP2101)
     if (deviceModel === "esp32_s3_photopainter") {
-        lines.push("external_components:");
-        lines.push("  - source: github://lewisxhe/esphome-axp2101");
+        // Commented out to avoid duplicate key error if user already has it in base config
+        // lines.push("external_components:");
+        // lines.push("  - source: github://lewisxhe/esphome-axp2101");
+        // lines.push("");
+        lines.push("# Note: waveshare_photopainter requires the 'esphome-axp2101' external component.");
+        lines.push("# Ensure these lines are in your main configuration:");
+        lines.push("# external_components:");
+        lines.push("#   - source: github://lewisxhe/esphome-axp2101@master");
         lines.push("");
     }
 
@@ -1702,6 +1708,7 @@ function generateSnippetLocally() {
             lines.push("      const auto COLOR_GREEN = Color(0, 255, 0, 0);");
             lines.push("      const auto COLOR_BLUE = Color(0, 0, 255, 0);");
             lines.push("      const auto COLOR_YELLOW = Color(255, 255, 0, 0);");
+            lines.push("      const auto COLOR_GRAY = Color(0, 0, 0, 0); // Placeholder, will dither");
         } else if (getDeviceModel() === "esp32_s3_photopainter") {
             // PhotoPainter is a 7-color display - use proper RGBA values
             lines.push("      const auto COLOR_BLACK = Color(0, 0, 0, 0);");
@@ -1714,12 +1721,41 @@ function generateSnippetLocally() {
             // Map ON/OFF to Black/White for compatibility with basic widgets
             lines.push("      const auto COLOR_ON = COLOR_BLACK;");
             lines.push("      const auto COLOR_OFF = COLOR_WHITE;");
+            lines.push("      const auto COLOR_GRAY = COLOR_BLACK; // Placeholder, used by dither helpers");
         } else {
             // E1001/TRMNL are binary displays - use 0/1
             lines.push("      Color COLOR_ON = Color(1);");
             lines.push("      Color COLOR_OFF = Color(0);");
         }
         lines.push("      it.fill(COLOR_OFF);");
+        lines.push("");
+
+        lines.push("      // --- Dithering Helpers (simulated gray) ---");
+        lines.push("      auto draw_dither_pixel = [&](int x, int y, Color c_on, Color c_off) {");
+        lines.push("          if ((x + y) % 2 == 0) it.draw_pixel_at(x, y, c_on);");
+        lines.push("          else it.draw_pixel_at(x, y, c_off);");
+        lines.push("      };");
+        lines.push("");
+        lines.push("      auto draw_grey_rect = [&](int x, int y, int w, int h) {");
+        lines.push("          for (int i = 0; i < w; i++) {");
+        lines.push("              for (int j = 0; j < h; j++) {");
+        lines.push("                  draw_dither_pixel(x + i, y + j, COLOR_ON, COLOR_OFF);");
+        lines.push("              }");
+        lines.push("          }");
+        lines.push("      };");
+        lines.push("");
+        // Generic mask to turn Black content into Gray (by punching white holes)
+        lines.push("      auto apply_grey_dither_mask = [&](int x, int y, int w, int h) {");
+        lines.push("          if (w <= 0 || h <= 0) return;");
+        lines.push("          for (int i = 0; i < w; i++) {");
+        lines.push("              for (int j = 0; j < h; j++) {");
+        lines.push("                  if ( (x + i + y + j) % 2 != 0 ) {");
+        lines.push("                      it.draw_pixel_at(x + i, y + j, COLOR_OFF);");
+        lines.push("                  }");
+        lines.push("              }");
+        lines.push("          }");
+        lines.push("      };");
+        lines.push("      // --- End Dithering Helpers ---");
         lines.push("");
 
         // Inject Calendar Helpers if needed (once)
@@ -1789,8 +1825,18 @@ function generateSnippetLocally() {
                         if (c === "green") return "COLOR_GREEN";
                         if (c === "blue") return "COLOR_BLUE";
                         if (c === "yellow") return "COLOR_YELLOW";
+                        if (c === "gray") return "COLOR_GRAY";
+                    }
+                    if (getDeviceModel() === "esp32_s3_photopainter") {
+                        if (c === "red") return "COLOR_RED";
+                        if (c === "green") return "COLOR_GREEN";
+                        if (c === "blue") return "COLOR_BLUE";
+                        if (c === "yellow") return "COLOR_YELLOW";
+                        if (c === "orange") return "COLOR_ORANGE";
+                        if (c === "gray") return "COLOR_GRAY";
                     }
                     return "COLOR_ON"; // black, gray, or any other falls back to black
+
                 };
 
                 for (const w of page.widgets) {
@@ -2013,11 +2059,13 @@ function generateSnippetLocally() {
                             if (fill) {
                                 if (isGray) {
                                     // Gray: use 50% checkerboard dithering pattern
-                                    lines.push(`        // Gray fill using 50% checkerboard dithering pattern`);
+                                    lines.push(`        // Opaque Grey fill using 50% checkerboard dithering pattern`);
                                     lines.push(`        for (int dy = 0; dy < ${w.height}; dy++) {`);
                                     lines.push(`          for (int dx = 0; dx < ${w.width}; dx++) {`);
                                     lines.push(`            if ((dx + dy) % 2 == 0) {`);
                                     lines.push(`              it.draw_pixel_at(${w.x}+dx, ${rectY}+dy, COLOR_ON);`);
+                                    lines.push(`            } else {`);
+                                    lines.push(`              it.draw_pixel_at(${w.x}+dx, ${rectY}+dy, COLOR_OFF);`);
                                     lines.push(`            }`);
                                     lines.push(`          }`);
                                     lines.push(`        }`);
@@ -2045,12 +2093,14 @@ function generateSnippetLocally() {
                             if (fill) {
                                 if (isGray) {
                                     // Gray: use 50% checkerboard dithering pattern for circle
-                                    lines.push(`        // Gray circle fill using 50% checkerboard dithering pattern`);
+                                    lines.push(`        // Opaque Grey circle fill using 50% checkerboard dithering pattern`);
                                     lines.push(`        for (int dy = -${radius}; dy <= ${radius}; dy++) {`);
                                     lines.push(`          for (int dx = -${radius}; dx <= ${radius}; dx++) {`);
                                     lines.push(`            if (dx*dx + dy*dy <= ${radius}*${radius}) {`);
                                     lines.push(`              if ((dx + dy) % 2 == 0) {`);
                                     lines.push(`                it.draw_pixel_at(${cx}+dx, ${cy}+dy, COLOR_ON);`);
+                                    lines.push(`              } else {`);
+                                    lines.push(`                it.draw_pixel_at(${cx}+dx, ${cy}+dy, COLOR_OFF);`);
                                     lines.push(`              }`);
                                     lines.push(`            }`);
                                     lines.push(`          }`);
@@ -2759,15 +2809,10 @@ function generateSnippetLocally() {
                                     const t = thickness;
                                     fx += t; fy += t; fw -= 2 * t; fh -= 2 * t; fr -= t;
                                     if (fr < 0) fr = 0;
-
-                                    if (isGray && fw > 0 && fh > 0) {
-                                        lines.push(`          // Clear inner for dithering`);
-                                        lines.push(`          draw_rrect(${fx}, ${fy}, ${fw}, ${fh}, ${fr}, COLOR_OFF);`);
-                                    }
                                 }
 
                                 if (isGray) {
-                                    lines.push(`          // Gray fill using 50% checkerboard dithering`);
+                                    lines.push(`          // Opaque Grey fill using 50% checkerboard dithering`);
                                     // Need to perform loop on adjusted coordinates
                                     // If showBorder, the indices change.
                                     // C++ Code generation:
@@ -2775,7 +2820,6 @@ function generateSnippetLocally() {
                                     lines.push(`          if (fw > 0 && fh > 0) {`);
                                     lines.push(`            for (int dy = 0; dy < fh; dy++) {`);
                                     lines.push(`              for (int dx = 0; dx < fw; dx++) {`);
-                                    lines.push(`                if ((fx + dx + fy + dy) % 2 != 0) continue;`); // Global dithering alignment
                                     lines.push(`                bool inside = false;`);
                                     lines.push(`                if ((dx >= fr && dx < fw - fr) || (dy >= fr && dy < fh - fr)) {`);
                                     lines.push(`                  inside = true;`);
@@ -2784,7 +2828,13 @@ function generateSnippetLocally() {
                                     lines.push(`                  int cy = (dy < fr) ? fr : fh - fr;`);
                                     lines.push(`                  if ((dx - cx)*(dx - cx) + (dy - cy)*(dy - cy) < fr*fr) inside = true;`);
                                     lines.push(`                }`);
-                                    lines.push(`                if (inside) it.draw_pixel_at(fx + dx, fy + dy, COLOR_ON);`);
+                                    lines.push(`                if (inside) {`);
+                                    lines.push(`                  if ((fx + dx + fy + dy) % 2 == 0) {`);
+                                    lines.push(`                    it.draw_pixel_at(fx + dx, fy + dy, COLOR_ON);`);
+                                    lines.push(`                  } else {`);
+                                    lines.push(`                    it.draw_pixel_at(fx + dx, fy + dy, COLOR_OFF);`);
+                                    lines.push(`                  }`);
+                                    lines.push(`                }`);
                                     lines.push(`              }`);
                                     lines.push(`            }`);
                                     lines.push(`          }`);
@@ -2823,11 +2873,13 @@ function generateSnippetLocally() {
                             if (fill) {
                                 if (isGray) {
                                     // Gray: use 50% checkerboard dithering pattern
-                                    lines.push(`        // Gray fill using 50% checkerboard dithering pattern`);
+                                    lines.push(`        // Opaque Grey fill using 50% checkerboard dithering pattern`);
                                     lines.push(`        for (int dy = 0; dy < ${w.height}; dy++) {`);
                                     lines.push(`          for (int dx = 0; dx < ${w.width}; dx++) {`);
                                     lines.push(`            if ((dx + dy) % 2 == 0) {`);
                                     lines.push(`              it.draw_pixel_at(${w.x}+dx, ${rectY}+dy, COLOR_ON);`);
+                                    lines.push(`            } else {`);
+                                    lines.push(`              it.draw_pixel_at(${w.x}+dx, ${rectY}+dy, COLOR_OFF);`);
                                     lines.push(`            }`);
                                     lines.push(`          }`);
                                     lines.push(`        }`);
@@ -2857,12 +2909,14 @@ function generateSnippetLocally() {
                             if (fill) {
                                 if (isGray) {
                                     // Gray: use 50% checkerboard dithering pattern for circle
-                                    lines.push(`        // Gray circle fill using 50% checkerboard dithering pattern`);
+                                    lines.push(`        // Opaque Grey circle fill using 50% checkerboard dithering pattern`);
                                     lines.push(`        for (int dy = -${Math.floor(r)}; dy <= ${Math.floor(r)}; dy++) {`);
                                     lines.push(`          for (int dx = -${Math.floor(r)}; dx <= ${Math.floor(r)}; dx++) {`);
                                     lines.push(`            if (dx*dx + dy*dy <= ${Math.floor(r)}*${Math.floor(r)}) {`);
                                     lines.push(`              if ((dx + dy) % 2 == 0) {`);
                                     lines.push(`                it.draw_pixel_at(${Math.floor(cx)}+dx, ${Math.floor(cy)}+dy, COLOR_ON);`);
+                                    lines.push(`              } else {`);
+                                    lines.push(`                it.draw_pixel_at(${Math.floor(cx)}+dx, ${Math.floor(cy)}+dy, COLOR_OFF);`);
                                     lines.push(`              }`);
                                     lines.push(`            }`);
                                     lines.push(`          }`);

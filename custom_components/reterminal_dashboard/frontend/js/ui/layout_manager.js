@@ -212,12 +212,14 @@ class LayoutManager {
         const names = {
             "reterminal_e1001": "E1001 (Mono)",
             "reterminal_e1002": "E1002 (Color)",
-            "trmnl": "TRMNL"
+            "trmnl": "TRMNL",
+            "esp32_s3_photopainter": "PhotoPainter (7-Color)"
         };
         // Also handle short codes (E1001, E1002, TRMNL)
         if (names[model]) return names[model];
         if (model === "E1001") return "E1001 (Mono)";
         if (model === "E1002") return "E1002 (Color)";
+        if (model === "PhotoPainter") return "PhotoPainter (7-Color)";
         if (model?.toLowerCase() === "trmnl") return "TRMNL";
         return model || "Unknown";
     }
@@ -362,6 +364,7 @@ class LayoutManager {
                                 <option value="E1001">reTerminal E1001 (Monochrome 800×480)</option>
                                 <option value="E1002">reTerminal E1002 (6-Color 800×480)</option>
                                 <option value="TRMNL">Official TRMNL (ESP32-C3 800×480)</option>
+                                <option value="PhotoPainter">Waveshare PhotoPainter (7-Color 800×480)</option>
                             </select>
                             <p class="hint" style="color: var(--muted); font-size: 11px; margin-top: 4px;">Select the device that will display this layout.</p>
                         </div>
@@ -374,7 +377,7 @@ class LayoutManager {
             `;
             document.body.appendChild(modal);
 
-            // Bind events
+            // Bindevents
             document.getElementById("newLayoutClose").addEventListener("click", () => {
                 modal.classList.add("hidden");
             });
@@ -424,6 +427,8 @@ class LayoutManager {
             deviceModel = "reterminal_e1002";
         } else if (deviceType === "TRMNL" || deviceType.toLowerCase() === "trmnl") {
             deviceModel = "trmnl";
+        } else if (deviceType === "PhotoPainter") {
+            deviceModel = "esp32_s3_photopainter";
         }
 
         try {
