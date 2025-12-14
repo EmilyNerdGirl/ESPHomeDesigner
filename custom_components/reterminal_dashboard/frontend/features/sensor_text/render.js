@@ -4,7 +4,8 @@
         const entityId = widget.entity_id || "";
         const title = widget.title || "";
         const format = props.value_format || "label_value";
-        const precision = parseInt(props.precision, 10);
+        let precision = parseInt(props.precision, 10);
+        if (isNaN(precision)) precision = 2; // Default to 2 to match export logic
         const unitProp = props.unit || "";
         const labelFontSize = props.label_font_size || 14;
         const valueFontSize = props.value_font_size || 20;

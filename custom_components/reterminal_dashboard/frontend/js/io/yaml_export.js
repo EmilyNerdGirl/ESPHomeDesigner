@@ -236,7 +236,8 @@ function generateSnippetLocally() {
 
     // 6. Sensors (Battery, SHT4x, etc + Widget Sensors)
     const widgetSensorLines = [];
-    const processedSensorIds = new Set(); // Prevent duplicates
+    const processedSensorIds = new Set(); // For numeric sensors
+    const processedTextSensorEntities = new Set(); // For text sensors
     const haTextSensorLines = []; // For text_sensor HA imports
 
     pagesLocal.forEach(p => {
@@ -253,41 +254,56 @@ function generateSnippetLocally() {
                 const isLocal = !!props.is_local_sensor;
 
                 // Only import HA entities, not local ones
-                if (entity && !isLocal && !processedSensorIds.has(entity)) {
-                    processedSensorIds.add(entity);
+                if (entity && !isLocal) {
                     const entityId = entity.replace(/[^a-zA-Z0-9_]/g, "_");
 
                     if (isTextSensor || entity.startsWith("text_sensor.")) {
-                        haTextSensorLines.push(`  - platform: homeassistant`);
-                        haTextSensorLines.push(`    id: ${entityId}`);
-                        haTextSensorLines.push(`    entity_id: ${entity}`);
-                        haTextSensorLines.push(`    internal: true`);
+                        // Text Sensor Mode: Use specific ID and allow parallel registration
+                        if (!processedTextSensorEntities.has(entity)) {
+                            processedTextSensorEntities.add(entity);
+                            haTextSensorLines.push(`  - platform: homeassistant`);
+                            haTextSensorLines.push(`    id: ${entityId}_txt`);
+                            haTextSensorLines.push(`    entity_id: ${entity}`);
+                            haTextSensorLines.push(`    internal: true`);
+                        }
                     } else {
-                        widgetSensorLines.push(`  - platform: homeassistant`);
-                        widgetSensorLines.push(`    id: ${entityId}`);
-                        widgetSensorLines.push(`    entity_id: ${entity}`);
-                        widgetSensorLines.push(`    internal: true`);
+                        // Numeric Sensor Mode: Use standard ID and checks
+                        if (!processedSensorIds.has(entity)) {
+                            processedSensorIds.add(entity);
+                            widgetSensorLines.push(`  - platform: homeassistant`);
+                            widgetSensorLines.push(`    id: ${entityId}`);
+                            widgetSensorLines.push(`    entity_id: ${entity}`);
+                            widgetSensorLines.push(`    internal: true`);
+                        }
                     }
                 }
 
                 // Handle secondary entity
-                if (entity2 && !isLocal && !processedSensorIds.has(entity2)) {
-                    processedSensorIds.add(entity2);
+                if (entity2 && !isLocal) {
                     const entityId2 = entity2.replace(/[^a-zA-Z0-9_]/g, "_");
 
                     if (isTextSensor || entity2.startsWith("text_sensor.")) {
-                        haTextSensorLines.push(`  - platform: homeassistant`);
-                        haTextSensorLines.push(`    id: ${entityId2}`);
-                        haTextSensorLines.push(`    entity_id: ${entity2}`);
-                        haTextSensorLines.push(`    internal: true`);
+                        if (!processedTextSensorEntities.has(entity2)) {
+                            processedTextSensorEntities.add(entity2);
+                            haTextSensorLines.push(`  - platform: homeassistant`);
+                            haTextSensorLines.push(`    id: ${entityId2}_txt`);
+                            haTextSensorLines.push(`    entity_id: ${entity2}`);
+                            haTextSensorLines.push(`    internal: true`);
+                        }
                     } else {
-                        widgetSensorLines.push(`  - platform: homeassistant`);
-                        widgetSensorLines.push(`    id: ${entityId2}`);
-                        widgetSensorLines.push(`    entity_id: ${entity2}`);
-                        widgetSensorLines.push(`    internal: true`);
+                        if (!processedSensorIds.has(entity2)) {
+                            processedSensorIds.add(entity2);
+                            widgetSensorLines.push(`  - platform: homeassistant`);
+                            widgetSensorLines.push(`    id: ${entityId2}`);
+                            widgetSensorLines.push(`    entity_id: ${entity2}`);
+                            widgetSensorLines.push(`    internal: true`);
+                        }
                     }
                 }
             }
+
+
+
 
             // Also collect graph widget entities
             if (t === "graph") {
@@ -555,8 +571,8 @@ function generateSnippetLocally() {
 
     // Collect weather entities used by sensor_text and weather_icon widgets
     const weatherEntitiesUsed = new Set();
-    // Collect text_sensor entities used by sensor_text widgets
-    const textSensorEntitiesUsed = new Set();
+    // (Redundant textSensorEntitiesUsed logic removed)
+
     for (const page of pagesLocal) {
         if (!page || !Array.isArray(page.widgets)) continue;
         for (const w of page.widgets) {
@@ -567,18 +583,11 @@ function generateSnippetLocally() {
             if ((t === "sensor_text" || t === "weather_icon") && entityId.startsWith("weather.")) {
                 weatherEntitiesUsed.add(entityId);
             }
-            if (t === "sensor_text" && entityId.startsWith("text_sensor.")) {
-                textSensorEntitiesUsed.add(entityId);
-            }
-            // Also add sensor.* entities marked as text sensors to the text_sensor block
-            if (t === "sensor_text" && entityId.startsWith("sensor.") && p.is_text_sensor) {
-                textSensorEntitiesUsed.add(entityId);
-            }
         }
     }
 
-    // Check if we need text_sensor block
-    const needsTextSensors = quoteRssWidgets.length > 0 || weatherForecastWidgets.length > 0 || weatherEntitiesUsed.size > 0 || textSensorEntitiesUsed.size > 0 || calendarWidgets.length > 0;
+    // Check if we need text_sensor block (secondary block for extras)
+    const needsTextSensors = quoteRssWidgets.length > 0 || weatherForecastWidgets.length > 0 || weatherEntitiesUsed.size > 0 || calendarWidgets.length > 0;
 
     if (needsTextSensors) {
         lines.push("text_sensor:");
@@ -614,20 +623,6 @@ function generateSnippetLocally() {
             lines.push("  # Weather Entity Sensors");
             for (const entityId of weatherEntitiesUsed) {
                 const safeId = entityId.replace(/\./g, "_").replace(/-/g, "_");
-                lines.push(`  - platform: homeassistant`);
-                lines.push(`    id: ${safeId}`);
-                lines.push(`    entity_id: ${entityId}`);
-                lines.push(`    internal: true`);
-            }
-            lines.push("");
-        }
-
-        // Add text_sensor entity sensors (for sensor_text widgets using text_sensor.* or sensor.* entities marked as text sensors)
-        if (textSensorEntitiesUsed.size > 0) {
-            lines.push("  # Text Sensor Entity Sensors (from Home Assistant)");
-            for (const entityId of textSensorEntitiesUsed) {
-                // Handle both text_sensor.* and sensor.* prefixes
-                const safeId = entityId.replace(/^(text_sensor|sensor)\./, "").replace(/\./g, "_").replace(/-/g, "_");
                 lines.push(`  - platform: homeassistant`);
                 lines.push(`    id: ${safeId}`);
                 lines.push(`    entity_id: ${entityId}`);
@@ -1040,7 +1035,8 @@ function generateSnippetLocally() {
                             const weight = parseInt(p.font_weight || 400);
                             const italic = !!p.italic;
                             const valueFormat = p.value_format || "label_value";
-                            const precision = parseInt(p.precision, 10);
+                            let precision = parseInt(p.precision, 10);
+                            if (isNaN(precision)) precision = 2; // Default to 2 decimals if not set
                             const prefix = (p.prefix || "").replace(/"/g, '\\"');
                             const postfix = (p.postfix || "").replace(/"/g, '\\"');
                             const unit = (p.unit || "").replace(/"/g, '\\"');
@@ -1063,7 +1059,7 @@ function generateSnippetLocally() {
                             const valueFontId = addFont(family, weight, valueFontSize, italic);
 
                             // Widget metadata comment - include all properties for round-trip persistence
-                            lines.push(`        // widget:sensor_text id:${w.id} type:sensor_text x:${w.x} y:${w.y} w:${w.width} h:${w.height} ent:${entity} entity_2:${entity2} title:"${title}" format:${valueFormat} label_font:${labelFontSize} value_font:${valueFontSize} color:${colorProp} label_align:${align} value_align:${align} precision:${isNaN(precision) ? -1 : precision} unit:"${unit}" prefix:"${prefix}" postfix:"${postfix}" separator:"${separator}" local:${isLocalSensor} text_sensor:${isTextSensor} font_family:"${family}" font_weight:${weight} italic:${italic}`);
+                            lines.push(`        // widget:sensor_text id:${w.id} type:sensor_text x:${w.x} y:${w.y} w:${w.width} h:${w.height} ent:${entity} entity_2:${entity2} title:"${title}" format:${valueFormat} label_font:${labelFontSize} value_font:${valueFontSize} color:${colorProp} label_align:${align} value_align:${align} precision:${precision} unit:"${unit}" prefix:"${prefix}" postfix:"${postfix}" separator:"${separator}" local:${isLocalSensor} text_sensor:${isTextSensor} font_family:"${family}" font_weight:${weight} italic:${italic}`);
 
                             if (!entity) {
                                 lines.push(`        it.printf(${w.x}, ${w.y}, id(${valueFontId}), ${color}, TextAlign::TOP_LEFT, "No Entity");`);
@@ -1077,7 +1073,7 @@ function generateSnippetLocally() {
 
                                 // Get value as string - handle text sensors vs numeric sensors
                                 if (isTextSensor || entity.startsWith("text_sensor.")) {
-                                    lines.push(`          std::string val1 = id(${entityId}).state;`);
+                                    lines.push(`          std::string val1 = id(${entityId}_txt).state;`);
                                 } else {
                                     // Numeric sensor with optional precision
                                     if (!isNaN(precision) && precision >= 0) {
@@ -1091,8 +1087,8 @@ function generateSnippetLocally() {
 
                                 // Handle secondary entity if present
                                 if (entityId2) {
-                                    if (isTextSensor) {
-                                        lines.push(`          std::string val2 = id(${entityId2}).state;`);
+                                    if (isTextSensor || (entity2 && entity2.startsWith("text_sensor."))) {
+                                        lines.push(`          std::string val2 = id(${entityId2}_txt).state;`);
                                     } else {
                                         if (!isNaN(precision) && precision >= 0) {
                                             lines.push(`          char buf2[32];`);

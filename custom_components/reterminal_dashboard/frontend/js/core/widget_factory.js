@@ -84,7 +84,7 @@ class WidgetFactory {
                     font_weight: 400,
                     italic: false,
                     unit: "",
-                    precision: -1,
+                    precision: 2,
                     text_align: "TOP_LEFT",
                     label_align: "TOP_LEFT",
                     value_align: "TOP_LEFT",

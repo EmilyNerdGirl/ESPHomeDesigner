@@ -2,7 +2,7 @@
 
 
 
-## v0.6.4 - Experimental LVGL & Enhancements
+## v0.7.0 - Experimental LVGL & Enhancements
 
 **Release Date:** December 9, 2025
 
@@ -18,8 +18,8 @@
 - **Dark Mode Option**: Added a toggle in Device Settings to enable global "Dark Mode" (black background with white widgets). Individual pages can override this setting via Page Settings with options: "Use Global Setting", "Light Mode", or "Dark Mode".
 - **Gray Color Support**: Full support for "Gray" color has been implemented for icons, text, and all other widgets.
 - **Sensor Text Intelligence**:
-  - **Smart Detection**: New logic automatically detects if a sensor state is a string or a number.
-  - **Manual Override**: Added "Is Text Sensor" checkbox to force text handling if auto-detection fails.
+  - **Smart Type Handling**: Decoupled text vs. numeric sensor registration. "Is Text Sensor" now forces a unique text-based internal ID, fixing "NaN" issues when an entity is previously registered as a number (e.g. in a graph).
+  - **Default Precision**: Sensor text widgets now default to 2 decimal places (e.g. `23.50`) instead of raw float output, improving default legibility. Precision can still be set to `-1` for raw output.
 
 - **Experimental LVGL Widgets**: Added experimental support for LVGL `button`, `arc`, `chart` (Line/Bar), `slider`, `bar`, `image`, and `qrcode` widgets.
 - **Text Sensor Enhancements**:

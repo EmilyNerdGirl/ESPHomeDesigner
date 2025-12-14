@@ -387,7 +387,7 @@ class PropertiesPanel {
                 AppState.updateWidget(widget.id, { title: v });
             });
             this.addSelect("Display Format", props.value_format || "label_value", ["label_value", "label_newline_value", "value_only"], (v) => updateProp("value_format", v));
-            this.addLabeledInput("Precision", "number", props.precision !== undefined ? props.precision : -1, (v) => updateProp("precision", parseInt(v, 10)));
+            this.addLabeledInput("Precision", "number", props.precision !== undefined ? props.precision : 2, (v) => updateProp("precision", parseInt(v, 10)));
             this.addLabeledInputWithDataList("Prefix", "text", props.prefix || "", ["€", "$", "£", "¥", "CHF", "kr"], (v) => updateProp("prefix", v));
             this.addLabeledInputWithDataList("Postfix", "text", props.postfix || "", [" kWh", " W", " V", " A", " °C", " %", " ppm", " lx"], (v) => updateProp("postfix", v));
 
