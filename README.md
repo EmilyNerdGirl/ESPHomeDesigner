@@ -37,7 +37,7 @@ It enables you to build premium, touch-interactive dashboards for various ESP32-
 > [!WARNING]
 > ### ⚠️ Important: Rolling back to v0.6.3 (Stable)
 > 
-> **I've decided to revert ESPHome on this repo from 0.7.2 back to 0.6.3.**
+> **I've decided to revert ESPHomeDesigner on this repo from 0.7.2 back to 0.6.3.**
 > 
 > To put it simply: the 0.7 branch was totally "undercooked" and had to go back to the kitchen to bake a little longer. I cannot have an unstable version on the main branch, so for now, **v0.6.3 is the default again**.
 > 
