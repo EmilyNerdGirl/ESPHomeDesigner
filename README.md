@@ -6,6 +6,9 @@
   <a href="https://github.com/sponsors/koosoli">
     <img src="https://img.shields.io/badge/Sponsor-❤️-ff69b4?style=for-the-badge&logo=github-sponsors" alt="Sponsor Project">
   </a>
+  <a href="https://buymeacoffee.com/koosoli">
+    <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee">
+  </a>
   <br>
   <strong>If you find this project useful, consider <a href="https://github.com/sponsors/koosoli">supporting its development!</a></strong>
 </div>
@@ -46,6 +49,7 @@ It enables you to build premium, touch-interactive dashboards for various ESP32-
 - **Multiple pages** - Navigate with hardware buttons, set different refresh rates per page
 - **Auto-generates ESPHome config** - Clean, readable YAML that you can paste into your existing ESPHome setup
 - **Round-trip editing** - Import existing ESPHome configs back into the editor
+- **AI-Powered Dashboard Assistant** - Generate entire layouts or individual widgets from simple text prompts (e.g., "Add a weather widget with bold large text")
 - **Full device integration** - Exposes buttons, buzzer, temperature, humidity sensors back to HA for automations
 - **Smart power management** - Battery monitoring, configurable refresh intervals, deep sleep support
 
@@ -178,6 +182,9 @@ For stable results, stick to **Native Mode** (standard widgets without LVGL pref
 ## Features
 
 - **Visual Editor** - Drag-and-drop canvas with snap-to-grid, live entity state updates
+- **AI-Powered Assistant** - Design entire dashboards using text prompts with support for Gemini, OpenAI, and OpenRouter
+- **Secure API Storage** - AI keys are stored locally in your browser and never sent to the backend or included in exports
+- **Hyper-Strict AI Compliance** - Engineered system prompts ensure the AI follows literal text instructions and professional design rules
 - **Layout Manager** - Manage multiple devices, export/import layouts as files
 - **Entity Picker** - Browse and search your actual HA entities with real-time preview
 - **Multi-Page Support** - Create up to 10 pages, each with custom refresh intervals
@@ -290,5 +297,6 @@ Made with love ❤️ - free and Open Source under the GPL 3.0 license. Share th
 ☕ **If you find this project useful, consider supporting its development!**
 
 [![Sponsor](https://img.shields.io/badge/Sponsor-❤️-ff69b4?style=for-the-badge&logo=github-sponsors)](https://github.com/sponsors/koosoli)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/koosoli)
 
 </div>
