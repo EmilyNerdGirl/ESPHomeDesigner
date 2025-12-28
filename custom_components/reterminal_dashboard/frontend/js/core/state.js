@@ -391,10 +391,38 @@ class StateStore {
         }
     }
 
+    updateWidgets(widgetIds, updates) {
+        let changed = false;
+        for (const id of widgetIds) {
+            const widget = this.getWidgetById(id);
+            if (widget) {
+                Object.assign(widget, updates);
+                changed = true;
+            }
+        }
+        if (changed) {
+            emit(EVENTS.STATE_CHANGED);
+        }
+    }
+
     deleteWidget(widgetId) {
-        const idsToDelete = (widgetId && !this.state.selectedWidgetIds.includes(widgetId))
+        let idsToDelete = (widgetId && !this.state.selectedWidgetIds.includes(widgetId))
             ? [widgetId]
             : [...this.state.selectedWidgetIds];
+
+        if (idsToDelete.length === 0) return;
+
+        // Filter out locked widgets
+        const totalRequested = idsToDelete.length;
+        idsToDelete = idsToDelete.filter(id => {
+            const w = this.getWidgetById(id);
+            return w && !w.locked;
+        });
+
+        const skippedCount = totalRequested - idsToDelete.length;
+        if (skippedCount > 0 && typeof showToast === 'function') {
+            showToast(`${skippedCount} locked widget(s) cannot be deleted`, "warning");
+        }
 
         if (idsToDelete.length === 0) return;
 

@@ -92,6 +92,15 @@ class KeyboardHandler {
             ev.preventDefault();
             AppState.redo();
         }
+
+        // Lock/Unlock: Ctrl+L
+        if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "l" && hasSelection) {
+            ev.preventDefault();
+            const selectedWidgets = AppState.getSelectedWidgets();
+            const allLocked = selectedWidgets.every(w => w.locked);
+            // Toggle: if all are locked, unlock them. Otherwise, lock all.
+            AppState.updateWidgets(AppState.selectedWidgetIds, { locked: !allLocked });
+        }
     }
 
     deleteWidget(widgetId) {

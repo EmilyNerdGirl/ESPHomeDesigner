@@ -212,7 +212,7 @@ async function generateSnippetLocally() {
                 if (t === "qr_code") {
                     qrCodeWidgets.push(w);
                 }
-                if (t === "touch_area") {
+                if (t === "touch_area" || t === "template_nav_bar") {
                     touchAreaWidgets.push(w);
                 }
                 if (t === "wifi_signal") {
@@ -712,12 +712,13 @@ async function generateSnippetLocally() {
         }
     }
 
-    // Add wifi_signal sensor if any wifi_signal widgets exist
+    // Add wifi_signal sensor if any wifi_signal or template_sensor_bar widgets exist
     let hasWifiSignalWidget = false;
     for (const page of pagesLocal) {
         if (!page.widgets) continue;
         for (const w of page.widgets) {
-            if ((w.type || "").toLowerCase() === "wifi_signal") {
+            const t = (w.type || "").toLowerCase();
+            if (t === "wifi_signal" || t === "template_sensor_bar") {
                 hasWifiSignalWidget = true;
                 break;
             }
@@ -730,12 +731,15 @@ async function generateSnippetLocally() {
         for (const page of pagesLocal) {
             if (!page.widgets) continue;
             for (const w of page.widgets) {
-                if ((w.type || "").toLowerCase() === "wifi_signal") {
-                    const p = w.props || {};
-                    if (p.is_local_sensor !== false) {
-                        needsLocalWifiSensor = true;
-                        break;
-                    }
+                const t = (w.type || "").toLowerCase();
+                const p = w.props || {};
+                if (t === "wifi_signal" && p.is_local_sensor !== false) {
+                    needsLocalWifiSensor = true;
+                    break;
+                }
+                if (t === "template_sensor_bar") {
+                    needsLocalWifiSensor = true; // Template bar always uses local wifi
+                    break;
                 }
             }
             if (needsLocalWifiSensor) break;
@@ -1031,12 +1035,12 @@ async function generateSnippetLocally() {
 
             // Allow sensor_text and weather_icon to trigger weather entity generation
             if (t === "sensor_text" || t === "weather_icon") {
-                if (entityId.startsWith("weather.")) {
+                if (entityId.startsWith("weather.") || (t === "weather_icon" && entityId.startsWith("sensor."))) {
                     weatherEntitiesUsed.add(entityId);
                 }
                 // Check secondary entity for sensor_text
                 const entityId2 = (w.entity_id_2 || p.entity_id_2 || "").trim();
-                if (entityId2 && entityId2.startsWith("weather.")) {
+                if (entityId2 && (entityId2.startsWith("weather.") || (t === "weather_icon" && entityId2.startsWith("sensor.")))) {
                     weatherEntitiesUsed.add(entityId2);
                 }
             }
@@ -1086,7 +1090,8 @@ async function generateSnippetLocally() {
         if (weatherEntitiesUsed.size > 0) {
             lines.push("  # Weather Entity Sensors");
             for (const entityId of weatherEntitiesUsed) {
-                const safeId = entityId.replace(/\./g, "_").replace(/-/g, "_");
+                // Ensure ID generation matches weather_icon rendering loop (strips sensor. prefix)
+                const safeId = entityId.replace(/^sensor\./, "").replace(/\./g, "_").replace(/-/g, "_");
                 lines.push(`  - platform: homeassistant`);
                 lines.push(`    id: ${safeId}`);
                 lines.push(`    entity_id: ${entityId}`);
@@ -1266,6 +1271,18 @@ async function generateSnippetLocally() {
                     // F058E = water-percent
                     // F058C = water
                     codes.forEach(c => addCode(c, size));
+                } else if (t === "template_sensor_bar") {
+                    const iconSize = p.icon_size || 20;
+                    const codes = ["F092B", "F091F", "F0922", "F0925", "F0928", // WiFi
+                        "F0E4C", "F050F", "F10C2",                 // Temp
+                        "F0E7A", "F058E", "F058C",                 // Hum
+                        "F0079", "F007E", "F007B", "F0082", "F0083" // Bat
+                    ];
+                    codes.forEach(c => addCode(c, iconSize));
+                } else if (t === "template_nav_bar") {
+                    const iconSize = p.icon_size || 24;
+                    const codes = ["F0141", "F02DC", "F0142"];
+                    codes.forEach(c => addCode(c, iconSize));
                 }
             });
         }
@@ -1551,6 +1568,16 @@ async function generateSnippetLocally() {
                         const bg = (p.background_color ? p.background_color.toLowerCase() : "");
                         const bc = (p.border_color ? p.border_color.toLowerCase() : "");
                         if (bg === "gray" || bg === "grey" || bc === "gray" || bc === "grey") {
+                            needsDither = true;
+                        }
+                    }
+
+                    // Template sensor bar and nav bar checks
+                    if (t === "template_sensor_bar" || t === "template_nav_bar") {
+                        // Default background is gray, so check if background is enabled
+                        const showBg = p.show_background !== false;
+                        const bg = (p.background_color || "gray").toLowerCase();
+                        if (showBg && (bg === "gray" || bg === "grey")) {
                             needsDither = true;
                         }
                     }
@@ -2166,7 +2193,7 @@ async function generateSnippetLocally() {
                             lines.push(`        // widget:ondevice_temperature id:${w.id} x:${w.x} y:${w.y} w:${w.width} h:${w.height} entity:${entityId || sensorId} icon_size:${iconSize} font_size:${fontSize} color:${colorProp} local:${isLocal} ${getCondProps(w)}`);
                             lines.push(`        {`);
                             lines.push(`          const char* temp_icon = "\\U000F050F"; // Default: thermometer`);
-                            lines.push(`          float temp_val = 22.5;`);
+                            lines.push(`          float temp_val = NAN;`);
                             lines.push(`          if (id(${sensorId}).has_state()) {`);
                             lines.push(`            temp_val = id(${sensorId}).state;`);
                             lines.push(`            if (temp_val <= 10) temp_icon = "\\U000F0E4C";      // thermometer-low`);
@@ -2219,7 +2246,7 @@ async function generateSnippetLocally() {
                             lines.push(`        // widget:ondevice_humidity id:${w.id} x:${w.x} y:${w.y} w:${w.width} h:${w.height} entity:${entityId || sensorId} icon_size:${iconSize} font_size:${fontSize} color:${colorProp} local:${isLocal} ${getCondProps(w)}`);
                             lines.push(`        {`);
                             lines.push(`          const char* hum_icon = "\\U000F058E"; // Default: water-percent`);
-                            lines.push(`          float hum_val = 45;`);
+                            lines.push(`          float hum_val = NAN;`);
                             lines.push(`          if (id(${sensorId}).has_state()) {`);
                             lines.push(`            hum_val = id(${sensorId}).state;`);
                             lines.push(`            if (hum_val <= 30) hum_icon = "\\U000F0E7A";       // water-outline`);
@@ -2243,7 +2270,171 @@ async function generateSnippetLocally() {
                             }
                             lines.push(`        }`);
 
+                        } else if (t === "template_sensor_bar") {
+                            const iconSize = parseInt(p.icon_size || 20, 10);
+                            const fontSize = parseInt(p.font_size || 14, 10);
+                            const colorProp = p.color || "black";
+                            const color = getColorConst(colorProp);
+                            const showWifi = p.show_wifi !== false;
+                            const showTemp = p.show_temperature !== false;
+                            const showHum = p.show_humidity !== false;
+                            const showBat = p.show_battery !== false;
+                            const showBg = p.show_background !== false;
+                            const bgColor = getColorConst(p.background_color || "gray");
+                            const radius = parseInt(p.border_radius || 8, 10);
+
+                            const iconFontRef = addFont("Material Design Icons", 400, iconSize);
+                            const textFontRef = addFont("Roboto", 500, fontSize);
+
+                            lines.push(`        // widget:template_sensor_bar id:${w.id} type:template_sensor_bar x:${w.x} y:${w.y} w:${w.width} h:${w.height} wifi:${showWifi} temp:${showTemp} hum:${showHum} bat:${showBat} bg:${showBg} bg_color:${p.background_color || "gray"} radius:${radius} icon_size:${iconSize} font_size:${fontSize} color:${colorProp} ${getCondProps(w)}`);
+
+                            lines.push(`        {`);
+                            if (showBg) {
+                                // Use bgColor for background
+                                lines.push(`          it.filled_rectangle(${w.x}, ${w.y}, ${w.width}, ${w.height}, ${bgColor});`);
+
+                                // Apply dithering for gray background BEFORE drawing content
+                                if ((p.background_color || "gray").toLowerCase() === "gray") {
+                                    lines.push(`          apply_grey_dither_mask(${w.x}, ${w.y}, ${w.width}, ${w.height});`);
+                                }
+
+                                // Draw border last to keep it solid
+                                lines.push(`          it.rectangle(${w.x}, ${w.y}, ${w.width}, ${w.height}, ${bgColor});`);
+                            }
+
+                            // Calculate spacing
+                            let activeCount = 0;
+                            if (showWifi) activeCount++;
+                            if (showTemp) activeCount++;
+                            if (showHum) activeCount++;
+                            if (showBat) activeCount++;
+
+                            if (activeCount > 0) {
+                                const spacing = w.width / activeCount;
+                                let currentX = w.x + spacing / 2;
+                                const centerY = w.y + w.height / 2;
+
+                                if (showWifi) {
+                                    lines.push(`          {`);
+                                    lines.push(`            const char* wifi_icon = "\\U000F092B";`);
+                                    lines.push(`            if (id(wifi_signal_dbm).has_state()) {`);
+                                    lines.push(`              float sig = id(wifi_signal_dbm).state;`);
+                                    lines.push(`              if (sig >= -50) wifi_icon = "\\U000F0928";`);
+                                    lines.push(`              else if (sig >= -70) wifi_icon = "\\U000F0925";`);
+                                    lines.push(`              else if (sig >= -85) wifi_icon = "\\U000F0922";`);
+                                    lines.push(`              else wifi_icon = "\\U000F091F";`);
+                                    lines.push(`            }`);
+                                    lines.push(`            it.printf(${Math.round(currentX)} - 12, ${centerY}, id(${iconFontRef}), ${color}, TextAlign::CENTER_LEFT, "%s", wifi_icon);`);
+                                    lines.push(`            if (id(wifi_signal_dbm).has_state()) it.printf(${Math.round(currentX)} + 8, ${centerY}, id(${textFontRef}), ${color}, TextAlign::CENTER_LEFT, "%.0fdB", id(wifi_signal_dbm).state);`);
+                                    lines.push(`            else it.printf(${Math.round(currentX)} + 8, ${centerY}, id(${textFontRef}), ${color}, TextAlign::CENTER_LEFT, "--dB");`);
+                                    lines.push(`          }`);
+                                    currentX += spacing;
+                                }
+
+                                if (showTemp) {
+                                    const tempId = profile.features.sht4x ? "sht4x_temperature" : (profile.features.sht3x ? "sht3x_temperature" : "shtc3_temperature");
+                                    lines.push(`          {`);
+                                    lines.push(`            it.printf(${Math.round(currentX)} - 12, ${centerY}, id(${iconFontRef}), ${color}, TextAlign::CENTER_LEFT, "\\U000F050F");`);
+                                    lines.push(`            if (id(${tempId}).has_state()) it.printf(${Math.round(currentX)} + 8, ${centerY}, id(${textFontRef}), ${color}, TextAlign::CENTER_LEFT, "%.1f°C", id(${tempId}).state);`);
+                                    lines.push(`            else it.printf(${Math.round(currentX)} + 8, ${centerY}, id(${textFontRef}), ${color}, TextAlign::CENTER_LEFT, "--°C");`);
+                                    lines.push(`          }`);
+                                    currentX += spacing;
+                                }
+
+                                if (showHum) {
+                                    const humId = profile.features.sht4x ? "sht4x_humidity" : (profile.features.sht3x ? "sht3x_humidity" : "shtc3_humidity");
+                                    lines.push(`          {`);
+                                    lines.push(`            it.printf(${Math.round(currentX)} - 12, ${centerY}, id(${iconFontRef}), ${color}, TextAlign::CENTER_LEFT, "\\U000F058E");`);
+                                    lines.push(`            if (id(${humId}).has_state()) it.printf(${Math.round(currentX)} + 8, ${centerY}, id(${textFontRef}), ${color}, TextAlign::CENTER_LEFT, "%.0f%%", id(${humId}).state);`);
+                                    lines.push(`            else it.printf(${Math.round(currentX)} + 8, ${centerY}, id(${textFontRef}), ${color}, TextAlign::CENTER_LEFT, "--%%");`);
+                                    lines.push(`          }`);
+                                    currentX += spacing;
+                                }
+
+                                if (showBat) {
+                                    lines.push(`          {`);
+                                    lines.push(`            const char* bat_icon = "\\U000F0082";`);
+                                    lines.push(`            float lvl = id(battery_level).state;`);
+                                    lines.push(`            if (lvl >= 90) bat_icon = "\\U000F0079";`);
+                                    lines.push(`            else if (lvl >= 50) bat_icon = "\\U000F007E";`);
+                                    lines.push(`            else if (lvl >= 20) bat_icon = "\\U000F007B";`);
+                                    lines.push(`            else bat_icon = "\\U000F0083";`);
+                                    lines.push(`            it.printf(${Math.round(currentX)} - 12, ${centerY}, id(${iconFontRef}), ${color}, TextAlign::CENTER_LEFT, "%s", bat_icon);`);
+                                    lines.push(`            if (id(battery_level).has_state()) it.printf(${Math.round(currentX)} + 8, ${centerY}, id(${textFontRef}), ${color}, TextAlign::CENTER_LEFT, "%.0f%%", id(battery_level).state);`);
+                                    lines.push(`            else it.printf(${Math.round(currentX)} + 8, ${centerY}, id(${textFontRef}), ${color}, TextAlign::CENTER_LEFT, "--%%");`);
+                                    lines.push(`          }`);
+                                }
+                            }
+
+                            // Apply grey dithering if foreground color is gray
+                            if (colorProp.toLowerCase() === "gray") {
+                                lines.push(`          apply_grey_dither_mask(${w.x}, ${w.y}, ${w.width}, ${w.height});`);
+                            }
+                            lines.push(`        }`);
+
+                        } else if (t === "template_nav_bar") {
+                            const iconSize = parseInt(p.icon_size || 24, 10);
+                            const colorProp = p.color || "black";
+                            const color = getColorConst(colorProp);
+                            const showPrev = p.show_prev !== false;
+                            const showHome = p.show_home !== false;
+                            const showNext = p.show_next !== false;
+                            const showBg = p.show_background !== false;
+                            const spacingFactor = p.spacing_factor || 1.0;
+                            const radius = parseInt(p.border_radius || 8, 10);
+
+                            const iconFontRef = addFont("Material Design Icons", 400, iconSize);
+
+                            lines.push(`        // widget:template_nav_bar id:${w.id} type:template_nav_bar x:${w.x} y:${w.y} w:${w.width} h:${w.height} prev:${showPrev} home:${showHome} next:${showNext} bg:${showBg} bg_color:${p.background_color || "gray"} radius:${radius} icon_size:${iconSize} color:${colorProp} ${getCondProps(w)}`);
+
+                            const bgColor = getColorConst(p.background_color || "gray");
+
+                            lines.push(`        {`);
+                            if (showBg) {
+                                // Use bgColor for background
+                                lines.push(`          it.filled_rectangle(${w.x}, ${w.y}, ${w.width}, ${w.height}, ${bgColor});`);
+
+                                // Apply dithering for gray background BEFORE drawing content
+                                if ((p.background_color || "gray").toLowerCase() === "gray") {
+                                    lines.push(`          apply_grey_dither_mask(${w.x}, ${w.y}, ${w.width}, ${w.height});`);
+                                }
+
+                                // Draw border last to keep it solid
+                                lines.push(`          it.rectangle(${w.x}, ${w.y}, ${w.width}, ${w.height}, ${bgColor});`);
+                            }
+
+                            // Calculate spacing
+                            let activeCount = 0;
+                            if (showPrev) activeCount++;
+                            if (showHome) activeCount++;
+                            if (showNext) activeCount++;
+
+                            if (activeCount > 0) {
+                                const spacing = w.width / activeCount;
+                                let currentX = w.x + spacing / 2;
+                                const centerY = w.y + w.height / 2;
+
+                                if (showPrev) {
+                                    lines.push(`          it.printf(${Math.round(currentX)}, ${centerY}, id(${iconFontRef}), ${color}, TextAlign::CENTER, "\\U000F0141");`);
+                                    currentX += spacing;
+                                }
+                                if (showHome) {
+                                    lines.push(`          it.printf(${Math.round(currentX)}, ${centerY}, id(${iconFontRef}), ${color}, TextAlign::CENTER, "\\U000F02DC");`);
+                                    currentX += spacing;
+                                }
+                                if (showNext) {
+                                    lines.push(`          it.printf(${Math.round(currentX)}, ${centerY}, id(${iconFontRef}), ${color}, TextAlign::CENTER, "\\U000F0142");`);
+                                }
+                            }
+
+                            // Apply grey dithering if foreground color is gray
+                            if (colorProp.toLowerCase() === "gray") {
+                                lines.push(`          apply_grey_dither_mask(${w.x}, ${w.y}, ${w.width}, ${w.height});`);
+                            }
+                            lines.push(`        }`);
+
                         } else if (t === "weather_icon") {
+
 
                             const entityId = (w.entity_id || "").trim();
                             const size = parseInt(p.size || 48, 10);
@@ -2351,17 +2542,17 @@ async function generateSnippetLocally() {
                             lines.push(`          int cx = ${w.x} + (${w.width} / 2);`);
 
                             // Header: Date
-                            lines.push(`          it.printf(cx, ${w.y} + 10, id(${fontBig}), ${color}, TextAlign::TOP_CENTER, "%d", time.day_of_month);`);
-                            lines.push(`          it.printf(cx, ${w.y} + 110, id(${fontDay}), ${color}, TextAlign::TOP_CENTER, "%s", id(todays_day_name_${safeWidgetId}).state.c_str());`);
-                            lines.push(`          it.printf(cx, ${w.y} + 140, id(${fontDate}), ${color}, TextAlign::TOP_CENTER, "%s", id(todays_date_month_year_${safeWidgetId}).state.c_str());`);
+                            lines.push(`          it.printf(cx, ${w.y} + 5, id(${fontBig}), ${color}, TextAlign::TOP_CENTER, "%d", time.day_of_month);`);
+                            lines.push(`          it.printf(cx, ${w.y} + 85, id(${fontDay}), ${color}, TextAlign::TOP_CENTER, "%s", id(todays_day_name_${safeWidgetId}).state.c_str());`);
+                            lines.push(`          it.printf(cx, ${w.y} + 110, id(${fontDate}), ${color}, TextAlign::TOP_CENTER, "%s", id(todays_date_month_year_${safeWidgetId}).state.c_str());`);
 
                             // Calendar Grid
-                            lines.push(`          int calendar_y_pos = ${w.y} + 180;`);
+                            lines.push(`          int calendar_y_pos = ${w.y} + 135;`);
                             lines.push(`          char cal[7][7][3];`);
                             lines.push(`          get_calendar_matrix(time.year, time.month, cal);`);
 
                             lines.push(`          int cell_width = (${w.width} - 40) / 7;`);
-                            lines.push(`          int cell_height = 25;`);
+                            lines.push(`          int cell_height = 20;`);
                             lines.push(`          int start_x = ${w.x} + 20;`);
 
                             lines.push(`          for (int i = 0; i < 7; i++) {`);
@@ -2389,13 +2580,10 @@ async function generateSnippetLocally() {
                             // Events
                             lines.push(`          if (id(calendar_json_${safeWidgetId}).state != "unknown" && id(calendar_json_${safeWidgetId}).state.length() > 2) {`);
                             lines.push(`             json::parse_json(id(calendar_json_${safeWidgetId}).state, [&](JsonObject root) -> bool {`);
-                            lines.push(`              JsonDocument doc;`);
-                            lines.push(`              DeserializationError error = deserializeJson(doc, id(calendar_json_${safeWidgetId}).state.c_str());`);
-                            lines.push(`              if (!error) {`);
-                            lines.push(`                  JsonArray days = doc.as<JsonArray>();`);
-                            lines.push(`                  int y_cursor = calendar_y_pos + (7 * cell_height) + 20;`);
-                            lines.push(`                  int max_y = ${w.y} + ${w.height} - 40;`);
-                            lines.push(`                  it.filled_rectangle(${w.x}, y_cursor - 10, ${w.width}, 2, ${color});`);
+                            lines.push(`                  JsonArray days = root["days"].as<JsonArray>();`);
+                            lines.push(`                  int y_cursor = calendar_y_pos + (7 * cell_height) + 15;`);
+                            lines.push(`                  int max_y = ${w.y} + ${w.height} - 30;`);
+                            lines.push(`                  it.filled_rectangle(${w.x} + 20, y_cursor - 5, ${w.width} - 40, 2, ${color});`);
                             lines.push(`                  for (JsonVariant dayEntry : days) {`);
                             lines.push(`                      if (y_cursor > max_y) break;`);
                             lines.push(`                      int currentDayNum = dayEntry["day"].as<int>();`);
@@ -2404,14 +2592,14 @@ async function generateSnippetLocally() {
                             lines.push(`                          const char* summary = event["summary"];`);
                             lines.push(`                          const char* start = event["start"];`);
                             lines.push(`                          it.printf(${w.x} + 20, y_cursor, id(${fontEventDay}), ${color}, TextAlign::TOP_LEFT, "%d", currentDayNum);`);
-                            lines.push(`                          it.printf(${w.x} + 60, y_cursor, id(${fontEvent}), ${color}, TextAlign::TOP_LEFT, "%.15s...", summary);`);
+                            lines.push(`                          it.printf(${w.x} + 60, y_cursor + 4, id(${fontEvent}), ${color}, TextAlign::TOP_LEFT, "%.15s...", summary);`);
                             lines.push(`                          if (is_all_day) {`);
-                            lines.push(`                              it.printf(${w.x} + ${w.width} - 10, y_cursor, id(${fontEvent}), ${color}, TextAlign::TOP_RIGHT, "All Day");`);
+                            lines.push(`                              it.printf(${w.x} + ${w.width} - 20, y_cursor + 4, id(${fontEvent}), ${color}, TextAlign::TOP_RIGHT, "All Day");`);
                             lines.push(`                          } else {`);
                             lines.push(`                              std::string timeStr = extract_time(start);`);
-                            lines.push(`                              it.printf(${w.x} + ${w.width} - 10, y_cursor, id(${fontEvent}), ${color}, TextAlign::TOP_RIGHT, "%s", timeStr.c_str());`);
+                            lines.push(`                              it.printf(${w.x} + ${w.width} - 20, y_cursor + 4, id(${fontEvent}), ${color}, TextAlign::TOP_RIGHT, "%s", timeStr.c_str());`);
                             lines.push(`                          }`);
-                            lines.push(`                          y_cursor += 40;`);
+                            lines.push(`                          y_cursor += 30;`);
                             lines.push(`                      };`);
                             lines.push(`                      if (dayEntry.containsKey("all_day")) {`);
                             lines.push(`                          for (JsonVariant event : dayEntry["all_day"].as<JsonArray>()) {`);
@@ -2426,7 +2614,6 @@ async function generateSnippetLocally() {
                             lines.push(`                          }`);
                             lines.push(`                      }`);
                             lines.push(`                  }`);
-                            lines.push(`              }`);
                             lines.push(`              return true;`);
                             lines.push(`             });`);
                             lines.push(`          }`);
@@ -2459,7 +2646,7 @@ async function generateSnippetLocally() {
                             const iconColorProp = w.props.icon_color || "black";
                             const iconColor = getColorConst(iconColorProp);
 
-                            lines.push(`        // widget:touch_area id:${w.id} type:touch_area x:${w.x} y:${w.y} w:${w.width} h:${w.height} entity:${entityId} title:"${title}" color:"${color}" border_color:"${borderColor}" icon:"${w.props.icon || ""}" icon_pressed:"${w.props.icon_pressed || ""}" icon_size:${iconSize} icon_color:${iconColorProp}`);
+                            lines.push(`        // widget:touch_area id:${w.id} type:touch_area x:${w.x} y:${w.y} w:${w.width} h:${w.height} entity:${entityId} title:"${title}" color:"${color}" border_color:"${borderColor}" icon:"${w.props.icon || ""}" icon_pressed:"${w.props.icon_pressed || ""}" icon_size:${iconSize} icon_color:${iconColorProp} nav_action:"${w.props.nav_action || "none"}"`);
 
                             if (icon) {
                                 const fontRef = addFont("Material Design Icons", 400, iconSize);
@@ -2875,7 +3062,7 @@ async function generateSnippetLocally() {
         if (profile.isPackageBased && packageContent) {
             // Check if recipe already contains the lambda header (avoids double lambda: |-)
             const hasHeader = packageContent.includes("lambda: |-");
-            const lambdaContent = (hasHeader ? "" : "    lambda: |-\n") + lambdaLines.join("\n");
+            const lambdaContent = (hasHeader ? "" : "lambda: |-\n") + lambdaLines.join("\n");
 
             packageContent = packageContent.replace("# __LAMBDA_PLACEHOLDER__", lambdaContent);
         }
@@ -2924,7 +3111,7 @@ async function generateSnippetLocally() {
     // INLINING INTEGRATION (Post-Process)
     // If package-based, we prepend the package content to our dynamic software sections.
     // ==========================================================================
-    if (packageContent) {
+    if (packageContent && profile.isPackageBased) {
         return packageContent + "\n\n" + finalYaml;
     }
 

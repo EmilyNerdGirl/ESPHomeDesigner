@@ -35,9 +35,12 @@ function generateTouchscreenSection(profile, displayId = "my_display", displayRo
 
     // Calc/Transform
     const transform = [];
-    if (t.mirror_x) transform.push("mirror_x: true");
-    if (t.mirror_y) transform.push("mirror_y: true");
-    if (t.swap_xy) transform.push("swap_xy: true");
+    // Support both nested t.transform.* and flat t.* properties (Backwards compatibility)
+    const tx = t.transform || {};
+
+    if (t.mirror_x || tx.mirror_x) transform.push("mirror_x: true");
+    if (t.mirror_y || tx.mirror_y) transform.push("mirror_y: true");
+    if (t.swap_xy || tx.swap_xy) transform.push("swap_xy: true");
 
     if (transform.length > 0) {
         lines.push("    transform:");
@@ -215,6 +218,11 @@ function generateDisplaySection(profile, orientation = 'landscape') {
     } else {
         // Device like reTerminal (800x480) - native landscape
         displayRotation = isRequestedPortrait ? 90 : 0;
+    }
+
+    // Apply optional rotation offset (e.g. for upside-down mounting)
+    if (profile.rotation_offset) {
+        displayRotation = (displayRotation + profile.rotation_offset) % 360;
     }
 
 
@@ -517,42 +525,104 @@ function generateBinarySensorSection(profile, numPages, displayId = "my_display"
     if (hasTouchAreas) {
         lines.push(`  # Touch Area Binary Sensors`);
         touchAreaWidgets.forEach(w => {
-            const safeId = (w.entity_id || `touch_area_${w.id}`).replace(/[^a-zA-Z0-9_]/g, "_");
-            const xMin = w.x;
-            const xMax = w.x + w.width;
-            const yMin = w.y;
-            const yMax = w.y + w.height;
-            const navAction = w.props?.nav_action || "none";
+            const t = (w.type || "").toLowerCase();
+            const p = w.props || {};
 
-            lines.push(`  - platform: touchscreen`);
-            lines.push(`    id: ${safeId}`);
-            lines.push(`    touchscreen_id: my_touchscreen`);
-            lines.push(`    x_min: ${xMin}`);
-            lines.push(`    x_max: ${xMax}`);
-            lines.push(`    y_min: ${yMin}`);
-            lines.push(`    y_max: ${yMax}`);
+            if (t === "template_nav_bar") {
+                const showPrev = p.show_prev !== false;
+                const showHome = p.show_home !== false;
+                const showNext = p.show_next !== false;
 
-            // Generate on_press action based on nav_action
-            if (navAction === "next_page") {
-                lines.push(`    on_press:`);
-                lines.push(`      - script.execute:`);
-                lines.push(`          id: change_page_to`);
-                lines.push(`          target_page: !lambda 'return id(display_page) + 1;'`);
-            } else if (navAction === "previous_page") {
-                lines.push(`    on_press:`);
-                lines.push(`      - script.execute:`);
-                lines.push(`          id: change_page_to`);
-                lines.push(`          target_page: !lambda 'return id(display_page) - 1;'`);
-            } else if (navAction === "reload_page") {
-                lines.push(`    on_press:`);
-                lines.push(`      - script.execute: manage_run_and_sleep`);
-            } else if (w.entity_id) {
-                // Default: Entity toggle behavior
-                lines.push(`    on_press:`);
-                lines.push(`      - homeassistant.service:`);
-                lines.push(`          service: homeassistant.toggle`);
-                lines.push(`          data:`);
-                lines.push(`            entity_id: ${w.entity_id}`);
+                let activeCount = 0;
+                if (showPrev) activeCount++;
+                if (showHome) activeCount++;
+                if (showNext) activeCount++;
+
+                if (activeCount > 0) {
+                    const widthPerButton = Math.floor(w.width / activeCount);
+                    let currentIdx = 0;
+
+                    const addNavTouch = (action, label) => {
+                        const xMin = w.x + (currentIdx * widthPerButton);
+                        const xMax = xMin + widthPerButton;
+                        const yMin = w.y;
+                        const yMax = w.y + w.height;
+
+                        lines.push(`  - platform: touchscreen`);
+                        lines.push(`    id: nav_${action}_${w.id}`);
+                        lines.push(`    touchscreen_id: my_touchscreen`);
+                        lines.push(`    x_min: ${xMin}`);
+                        lines.push(`    x_max: ${xMax}`);
+                        lines.push(`    y_min: ${yMin}`);
+                        lines.push(`    y_max: ${yMax}`);
+                        lines.push(`    on_press:`);
+
+                        if (action === "prev") {
+                            lines.push(`      - script.execute:`);
+                            lines.push(`          id: change_page_to`);
+                            lines.push(`          target_page: !lambda 'return id(display_page) - 1;'`);
+                        } else if (action === "home") {
+                            lines.push(`      - script.execute: manage_run_and_sleep`);
+                        } else if (action === "next") {
+                            lines.push(`      - script.execute:`);
+                            lines.push(`          id: change_page_to`);
+                            lines.push(`          target_page: !lambda 'return id(display_page) + 1;'`);
+                        }
+                        currentIdx++;
+                    };
+
+                    if (showPrev) addNavTouch("prev", "Previous");
+                    if (showHome) addNavTouch("home", "Home/Reload");
+                    if (showNext) addNavTouch("next", "Next");
+                }
+            } else {
+                const safeId = (w.entity_id || `touch_area_${w.id}`).replace(/[^a-zA-Z0-9_]/g, "_");
+                // Hitbox expansion: Ensure touch area is at least icon_size, centered on the widget
+                const iconSize = parseInt(p.icon_size || 40, 10);
+                const minWidth = Math.max(w.width, iconSize);
+                const minHeight = Math.max(w.height, iconSize);
+
+                let xMin = w.x - Math.floor((minWidth - w.width) / 2);
+                let xMax = xMin + minWidth;
+                let yMin = w.y - Math.floor((minHeight - w.height) / 2);
+                let yMax = yMin + minHeight;
+
+                // Clamp to canvas bounds (minimum 0)
+                xMin = Math.max(0, xMin);
+                yMin = Math.max(0, yMin);
+
+                const navAction = p.nav_action || "none";
+
+                lines.push(`  - platform: touchscreen`);
+                lines.push(`    id: ${safeId}`);
+                lines.push(`    touchscreen_id: my_touchscreen`);
+                lines.push(`    x_min: ${xMin}`);
+                lines.push(`    x_max: ${xMax}`);
+                lines.push(`    y_min: ${yMin}`);
+                lines.push(`    y_max: ${yMax}`);
+
+                // Generate on_press action based on nav_action
+                if (navAction === "next_page") {
+                    lines.push(`    on_press:`);
+                    lines.push(`      - script.execute:`);
+                    lines.push(`          id: change_page_to`);
+                    lines.push(`          target_page: !lambda 'return id(display_page) + 1;'`);
+                } else if (navAction === "previous_page") {
+                    lines.push(`    on_press:`);
+                    lines.push(`      - script.execute:`);
+                    lines.push(`          id: change_page_to`);
+                    lines.push(`          target_page: !lambda 'return id(display_page) - 1;'`);
+                } else if (navAction === "reload_page") {
+                    lines.push(`    on_press:`);
+                    lines.push(`      - script.execute: manage_run_and_sleep`);
+                } else if (w.entity_id) {
+                    // Default: Entity toggle behavior
+                    lines.push(`    on_press:`);
+                    lines.push(`      - homeassistant.service:`);
+                    lines.push(`          service: homeassistant.toggle`);
+                    lines.push(`          data:`);
+                    lines.push(`            entity_id: ${w.entity_id}`);
+                }
             }
         });
     }

@@ -286,12 +286,19 @@ window.DEVICE_PROFILES = {
       multiplier: 2.0,
       calibration: { min: 3.27, max: 4.15 } // Standard LiPo
     },
+    // rotation_offset: 180 flips the display upside down to correct mounting.
+    rotation_offset: 180,
     touch: {
       platform: "gt911",
       i2c_id: "bus_a",
+      address: 0x14,
       interrupt_pin: "GPIO36",
       update_interval: "never", // Interrupt used
-      transform: { mirror_x: false, mirror_y: false, swap_xy: false },
+      // NOTE: Rotating 180 degrees is equivalent to mirroring both X and Y.
+      // Since M5Paper with IT8951E is already swapped (swap_xy: true),
+      // rotating 180 involves flipping the mirroring state.
+      // If touch is still inverted after rotation, swap mirror_x/mirror_y below.
+      transform: { mirror_x: false, mirror_y: true, swap_xy: true },
       // Calibration matches the IT8951E component's 960x540 coordinate space
       calibration: { x_min: 0, x_max: 960, y_min: 0, y_max: 540 }
     },

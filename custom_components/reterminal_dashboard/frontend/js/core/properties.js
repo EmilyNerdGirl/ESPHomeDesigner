@@ -119,7 +119,7 @@ today = data["now"]
 converted_data = convert_calendar_format(input_data, today)
 
 # Pass the output back to Home Assistant
-output["entries"] = converted_data[0]
+output["entries"] = {"days": converted_data[0]}
 output["closest_end_time"] = converted_data[1]
 `;
 
@@ -158,11 +158,10 @@ class PropertiesPanel {
         const lockToggle = document.getElementById("lockPositionToggle");
         if (lockToggle) {
             lockToggle.addEventListener("change", (e) => {
-                const widget = AppState.getSelectedWidget();
-                if (widget) {
-                    AppState.updateWidget(widget.id, { locked: e.target.checked });
-                    // Trigger a re-render of the canvas to update handles/cursor
-                    emit(EVENTS.STATE_CHANGED);
+                const selectedIds = AppState.selectedWidgetIds;
+                if (selectedIds.length > 0) {
+                    AppState.updateWidgets(selectedIds, { locked: e.target.checked });
+                    // No need to emit STATE_CHANGED here as updateWidgets already does it
                 }
             });
         }
@@ -193,13 +192,21 @@ class PropertiesPanel {
         this.lastRenderedWidgetId = currentWidgetId;
 
         this.panel.innerHTML = "";
+
+        // Update Lock Toggle state based on selection
+        const lockToggle = document.getElementById("lockPositionToggle");
+        if (lockToggle) {
+            const selectedWidgets = AppState.getSelectedWidgets();
+            const allLocked = selectedWidgets.length > 0 && selectedWidgets.every(w => w.locked);
+            const someLocked = selectedWidgets.some(w => w.locked);
+
+            lockToggle.checked = allLocked;
+            lockToggle.indeterminate = someLocked && !allLocked;
+            lockToggle.disabled = selectedWidgets.length === 0;
+        }
+
         if (AppState.selectedWidgetIds.length === 0) {
             this.panel.innerHTML = "<div style='padding:16px;color:#aaa;text-align:center;'>Select a widget to edit properties</div>";
-            const lockToggle = document.getElementById("lockPositionToggle");
-            if (lockToggle) {
-                lockToggle.checked = false;
-                lockToggle.disabled = true;
-            }
             return;
         }
 
@@ -209,15 +216,10 @@ class PropertiesPanel {
                     <div style="font-size: 24px; margin-bottom: 12px;">📑</div>
                     <div style="font-weight: 600; color: var(--text);">${AppState.selectedWidgetIds.length} widgets selected</div>
                     <div style="font-size: 11px; color: var(--muted); margin-top: 8px;">
-                        Bulk editing is not supported yet. Move, group, or delete the selection.
+                        Move, group, or delete the selection. Use the Lock toggle above to lock all.
                     </div>
                 </div>
             `;
-            const lockToggle = document.getElementById("lockPositionToggle");
-            if (lockToggle) {
-                lockToggle.checked = false;
-                lockToggle.disabled = true;
-            }
             return;
         }
 
@@ -232,12 +234,7 @@ class PropertiesPanel {
         title.textContent = `${type} Properties`;
         this.panel.appendChild(title);
 
-        // Update Lock Toggle state based on widget
-        const lockToggle = document.getElementById("lockPositionToggle");
-        if (lockToggle) {
-            lockToggle.checked = !!widget.locked;
-            lockToggle.disabled = false;
-        }
+        // Lock Toggle state is already updated above in the general selection handling
 
         // === LAYER ORDER SECTION (TOP) ===
         this.addSectionLabel("Layer Order");
@@ -887,7 +884,44 @@ class PropertiesPanel {
 
             this.addSelect("Color", props.color || "black", colors, (v) => updateProp("color", v));
         }
+        else if (type === "template_sensor_bar") {
+            this.addSectionLabel("Sensor Visibility");
+            this.addCheckbox("Show WiFi", props.show_wifi !== false, (v) => updateProp("show_wifi", v));
+            this.addCheckbox("Show Temperature", props.show_temperature !== false, (v) => updateProp("show_temperature", v));
+            this.addCheckbox("Show Humidity", props.show_humidity !== false, (v) => updateProp("show_humidity", v));
+            this.addCheckbox("Show Battery", props.show_battery !== false, (v) => updateProp("show_battery", v));
+
+            this.addSectionLabel("Appearance");
+            this.addCheckbox("Show Background", props.show_background !== false, (v) => updateProp("show_background", v));
+            if (props.show_background !== false) {
+                this.addSelect("Background Color", props.background_color || "gray", colors, (v) => updateProp("background_color", v));
+                this.addLabeledInput("Border Radius", "number", props.border_radius || 8, (v) => updateProp("border_radius", parseInt(v, 10)));
+            }
+
+            this.addSectionLabel("Sizes & Color");
+            this.addLabeledInput("Icon Size", "number", props.icon_size || 20, (v) => updateProp("icon_size", parseInt(v, 10)));
+            this.addLabeledInput("Font Size", "number", props.font_size || 14, (v) => updateProp("font_size", parseInt(v, 10)));
+            this.addSelect("Foreground Color", props.color || "black", colors, (v) => updateProp("color", v));
+        }
+        else if (type === "template_nav_bar") {
+            this.addSectionLabel("Button Visibility");
+            this.addCheckbox("Show Previous", props.show_prev !== false, (v) => updateProp("show_prev", v));
+            this.addCheckbox("Show Home", props.show_home !== false, (v) => updateProp("show_home", v));
+            this.addCheckbox("Show Next", props.show_next !== false, (v) => updateProp("show_next", v));
+
+            this.addSectionLabel("Appearance");
+            this.addCheckbox("Show Background", props.show_background !== false, (v) => updateProp("show_background", v));
+            if (props.show_background !== false) {
+                this.addSelect("Background Color", props.background_color || "gray", colors, (v) => updateProp("background_color", v));
+                this.addLabeledInput("Border Radius", "number", props.border_radius || 8, (v) => updateProp("border_radius", parseInt(v, 10)));
+            }
+
+            this.addSectionLabel("Sizes & Color");
+            this.addLabeledInput("Icon Size", "number", props.icon_size || 24, (v) => updateProp("icon_size", parseInt(v, 10)));
+            this.addSelect("Foreground Color", props.color || "black", colors, (v) => updateProp("color", v));
+        }
         else if (type === "touch_area") {
+
             // Navigation Action dropdown
             this.addSelect("Navigation Action", props.nav_action || "none", [
                 { value: "none", label: "None (Entity Toggle)" },

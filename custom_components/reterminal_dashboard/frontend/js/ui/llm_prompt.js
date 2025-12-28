@@ -30,6 +30,14 @@ class LLMPrompt {
         this.modal.style.display = 'flex';
         this.input.focus();
 
+        // Check if configured
+        const provider = window.AppState.settings.ai_provider || "gemini";
+        const key = window.AppState.settings[`ai_api_key_${provider}`];
+        const warning = document.getElementById('aiConfigWarning');
+        if (warning) {
+            warning.style.display = key ? 'none' : 'block';
+        }
+
         // Reset state
         this.status.textContent = "";
         this.status.style.color = "";

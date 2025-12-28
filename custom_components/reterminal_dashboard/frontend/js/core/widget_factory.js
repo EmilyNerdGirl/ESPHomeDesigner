@@ -517,7 +517,7 @@ class WidgetFactory {
             case "calendar":
                 // Standard size for a calendar widget
                 widget.width = 400;
-                widget.height = 350;
+                widget.height = 550;
                 widget.props = {
                     entity_id: "sensor.esp_calendar_data",
                     border_width: 2,
@@ -531,6 +531,39 @@ class WidgetFactory {
                     font_size_event: 18
                 };
                 break;
+
+            case "template_sensor_bar":
+                widget.width = 320;
+                widget.height = 50;
+                widget.props = {
+                    show_wifi: true,
+                    show_temperature: true,
+                    show_humidity: true,
+                    show_battery: true,
+                    show_background: true,
+                    background_color: "gray",
+                    border_radius: 8,
+                    icon_size: 20,
+                    font_size: 14,
+                    color: defaultColor
+                };
+                break;
+
+            case "template_nav_bar":
+                widget.width = 200;
+                widget.height = 50;
+                widget.props = {
+                    show_prev: true,
+                    show_home: true,
+                    show_next: true,
+                    show_background: true,
+                    background_color: "gray",
+                    border_radius: 8,
+                    icon_size: 24,
+                    color: defaultColor
+                };
+                break;
+
 
             case "lvgl_tabview":
                 widget.width = 300;

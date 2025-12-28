@@ -1,5 +1,33 @@
 # Release Notes
 
+## v0.8.4 - Weather Icon Sensor Fix
+
+**Release Date:** December 29, 2025
+
+### 🎉 New Features
+- **On-Board Sensor Bar Widget**: A unified status bar for local hardware, combining WiFi signal, Temperature, Humidity, and Battery levels into a single, highly customizable widget.
+- **Navigation Bar Widget**: A premium, all-in-one navigation control featuring "Previous", "Home/Reload", and "Next" buttons. Automatically generates the complex touch area logic and C++ rendering required for multi-page dashboards.
+- **Batch Widget Locking**: Lasso-selected widgets can now be locked or unlocked simultaneously using the "Lock" toggle in the properties panel. 
+- **Lock/Unlock Shortcut (Ctrl+L)**: Quickly toggle the lock status of all selected widgets with a new keyboard shortcut.
+- **Locked Widget Preservation**: Locked widgets are now protected from accidental deletion via keyboard shortcuts or the "Clear Page" operation.
+- **UI Layout Optimization**: Refined the editor interface with a 3-column keyboard shortcut list and a subtle, relocated AI Assistant button next to the YAML editor.
+- **AI Assist Onboarding**: Added a configuration hint and direct settings link within the AI Assistant modal for unconfigured users.
+
+### 🐛 Bug Fixes
+- **Weather Icon Sensor Fix**: Addressed an issue where `weather_icon` widgets required manual `text_sensor` entries in ESPHome YAML. The designer now automatically generates these sensors for both `weather.*` and `sensor.*` entities.
+- **Unified ID Generation**: Standardized the ESPHome ID generation for weather-related sensors, ensuring that `sensor.*` prefixes are correctly stripped to match the internal C++ lambda references, preventing compilation errors.
+- **Calendar Display Optimization**: Optimized the calendar widget layout and C++ rendering logic to resolve an issue where only a single event was displayed. Reduced header and grid spacing and increased the default widget height (to 550px) to accommodate more events.
+- **Robust Calendar JSON Parsing**: Refactored the ESPHome lambda to use direct JSON object access instead of redundant parsing, significantly reducing memory overhead and improving parsing reliability for multi-event datasets.
+- **Calendar Backend Refinement**: Updated the Python helper script to return data in a standard dictionary format, ensuring full compatibility with ESPHome's JSON component.
+- **YAML Lambda Indentation**: Fixed a critical bug in package-based hardware recipes where the display lambda was incorrectly indented by 8 spaces instead of 4, causing "Invalid YAML syntax" and compilation errors in ESPHome.
+- **YAML Configuration Duplication**: Fixed a bug where custom hardware recipes were prepended twice in the exported YAML under certain conditions.
+- **Custom Hardware Resolution**: Fixed an issue where the resolution specified in custom hardware recipe headers (e.g., `# Resolution: 480x320`) was ignored by the backend, causing the designer to default to 800x480.
+- **M5 Touch Area Precision**: Fixed a bug in the coordinate transformation logic for M5 devices (specifically M5Paper) that caused touch inputs to be rotated 90° relative to the display. This ensures navigation buttons align correctly with visual elements. *Note: This fix remains untested on physical hardware.*
+- **Navigation Widget Height Persistence**: Fixed a critical bug where `template_nav_bar` and navigation touch buttons would reset their height to 10px on page refresh in the deployed Home Assistant version. The Python backend's `clamp_to_canvas()` function was using hardcoded 800x480 landscape dimensions, incorrectly clamping widget heights for portrait layouts or devices with non-standard resolutions (e.g., M5Paper 540x960).
+- **Gray Background Rendering**: Fixed an issue where `template_nav_bar` and `template_sensor_bar` widgets rendered their backgrounds as solid black instead of gray. The export logic was incorrectly using the foreground (icon) color for backgrounds and checking the wrong property for dithering.
+
+---
+
 ## v0.8.3 - Mobile Touch & Hardware Fixes
 
 **Release Date:** December 28, 2025

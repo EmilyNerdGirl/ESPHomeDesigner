@@ -521,13 +521,31 @@ function parseSnippetYamlOffline(yamlText) {
                     continue;
                 }
 
+                // --- Default Dimensions Logic ---
+                let defaultW = 100;
+                let defaultH = 30;
+
+                if (widgetType === "template_nav_bar") {
+                    defaultW = 200;
+                    defaultH = 50;
+                } else if (widgetType === "touch_area") {
+                    defaultW = 100;
+                    defaultH = 100;
+                } else if (["nav_next_page", "nav_previous_page", "nav_reload_page"].includes(widgetType)) {
+                    defaultW = 80;
+                    defaultH = 80;
+                } else if (widgetType === "battery_icon" || widgetType === "wifi_signal" || widgetType === "icon") {
+                    defaultW = 60;
+                    defaultH = 60;
+                }
+
                 const widget = {
                     id: p.id,
                     type: widgetType,
                     x: parseInt(p.x || 0, 10),
                     y: parseInt(p.y || 0, 10),
-                    width: parseInt(p.w || 100, 10),
-                    height: parseInt(p.h || 30, 10),
+                    width: parseInt(p.w || defaultW, 10),
+                    height: parseInt(p.h || defaultH, 10),
                     title: p.title || "",
                     entity_id: p.entity || p.ent || "",
                     condition_entity: p.cond_ent || "",
@@ -684,7 +702,8 @@ function parseSnippetYamlOffline(yamlText) {
                         icon: p.icon || "",
                         icon_pressed: p.icon_pressed || "",
                         icon_size: parseInt(p.icon_size || 40, 10),
-                        icon_color: p.icon_color || "black"
+                        icon_color: p.icon_color || "black",
+                        nav_action: p.nav_action || "none"
                     };
                 } else if (widgetType === "rounded_rect") {
                     widget.props = {
@@ -755,7 +774,32 @@ function parseSnippetYamlOffline(yamlText) {
                         font_family: p.font_family || "Roboto",
                         color: p.color || "black"
                     };
+                } else if (widgetType === "template_sensor_bar") {
+                    widget.props = {
+                        show_wifi: (p.wifi !== "false"),
+                        show_temperature: (p.temp !== "false"),
+                        show_humidity: (p.hum !== "false"),
+                        show_battery: (p.bat !== "false"),
+                        show_background: (p.bg !== "false"),
+                        background_color: p.bg_color || "gray",
+                        border_radius: parseInt(p.radius || 8, 10),
+                        icon_size: parseInt(p.icon_size || 20, 10),
+                        font_size: parseInt(p.font_size || 14, 10),
+                        color: p.color || "black"
+                    };
+                } else if (widgetType === "template_nav_bar") {
+                    widget.props = {
+                        show_prev: (p.prev !== "false"),
+                        show_home: (p.home !== "false"),
+                        show_next: (p.next !== "false"),
+                        show_background: (p.bg !== "false"),
+                        background_color: p.bg_color || "gray",
+                        border_radius: parseInt(p.radius || 8, 10),
+                        icon_size: parseInt(p.icon_size || 24, 10),
+                        color: p.color || "black"
+                    };
                 } else if (widgetType === "lvgl_button") {
+
                     widget.props = {
                         ...widget.props,
                         text: p.text || "BTN",
